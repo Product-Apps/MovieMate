@@ -1,20 +1,20 @@
+// store/useMovieStore.ts
 import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
-import { Movie, MovieRecommendation, Language } from '@/types';
+import { Movie, MovieRecommendation } from '@/types';
 
 interface MovieState {
   movies: Movie[];
   recommendations: MovieRecommendation[];
   selectedLanguages: string[];
-  selectedGenres: string[];
+  selectedGenres: number[];
   isLoading: boolean;
   error: string | null;
   
-  // Actions
   setMovies: (movies: Movie[]) => void;
   setRecommendations: (recommendations: MovieRecommendation[]) => void;
   setSelectedLanguages: (languages: string[]) => void;
-  setSelectedGenres: (genres: string[]) => void;
+  setSelectedGenres: (genres: number[]) => void;
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
   addMovie: (movie: Movie) => void;
@@ -27,7 +27,7 @@ export const useMovieStore = create<MovieState>()(
     (set) => ({
       movies: [],
       recommendations: [],
-      selectedLanguages: ['English'],
+      selectedLanguages: ['en'],
       selectedGenres: [],
       isLoading: false,
       error: null,
@@ -53,7 +53,7 @@ export const useMovieStore = create<MovieState>()(
           'movie/setSelectedLanguages'
         ),
 
-      setSelectedGenres: (genres: string[]) =>
+      setSelectedGenres: (genres: number[]) =>
         set(
           { selectedGenres: genres },
           false,
@@ -105,7 +105,6 @@ export const useMovieStore = create<MovieState>()(
   )
 );
 
-// Selectors
 export const useMovies = () => useMovieStore((state) => state.movies);
 export const useRecommendations = () => useMovieStore((state) => state.recommendations);
 export const useSelectedLanguages = () => useMovieStore((state) => state.selectedLanguages);

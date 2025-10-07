@@ -1,6 +1,8 @@
+// store/useUserStore.ts
 import { create } from 'zustand';
-import { devtools, persist } from 'zustand/middleware';
+import { devtools, persist, createJSONStorage } from 'zustand/middleware';
 import { UserMoodHistory } from '@/types';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface UserState {
   userId: string | null;
@@ -11,7 +13,6 @@ interface UserState {
     darkMode: boolean;
   };
   
-  // Actions
   setUserId: (id: string) => void;
   addMoodHistory: (history: UserMoodHistory) => void;
   updatePreferences: (preferences: Partial<UserState['preferences']>) => void;
@@ -40,7 +41,7 @@ export const useUserStore = create<UserState>()(
         addMoodHistory: (history: UserMoodHistory) =>
           set(
             (state) => ({
-              moodHistory: [history, ...state.moodHistory].slice(0, 50), // Keep last 50 entries
+              moodHistory: [history, ...state.moodHistory].slice(0, 50),
             }),
             false,
             'user/addMoodHistory'
@@ -72,6 +73,7 @@ export const useUserStore = create<UserState>()(
       }),
       {
         name: 'user-store',
+        storage: createJSONStorage(() => AsyncStorage),
       }
     ),
     {
@@ -80,7 +82,6 @@ export const useUserStore = create<UserState>()(
   )
 );
 
-// Selectors
 export const useUserId = () => useUserStore((state) => state.userId);
 export const useMoodHistory = () => useUserStore((state) => state.moodHistory);
 export const useUserPreferences = () => useUserStore((state) => state.preferences);

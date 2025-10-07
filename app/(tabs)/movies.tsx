@@ -1,67 +1,83 @@
+// app/(tabs)/movies.tsx
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, ScrollView, View, Text, Pressable, FlatList, Image, Dimensions } from 'react-native';
+import { StyleSheet, ScrollView, View, Text, Pressable, FlatList, Image, Dimensions, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useMovieStore } from '@/store/useMovieStore';
 import { useMoodStore } from '@/store/useMoodStore';
 import { Movie, MovieRecommendation } from '@/types/movie';
-import { SAMPLE_MOVIES } from '@/constants/Movies';
+import { moodAnalyzer } from '@/services/moodAnalyzer';
+import { recommendationEngine } from '@/services/movieRecommendationEngine';
+import { LANGUAGES } from '@/constants/Languages';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - 60) / 2;
 
 export default function MoviesScreen() {
   const router = useRouter();
-  const { recommendations, setRecommendations } = useMovieStore();
-  const { currentMoodAnalysis, puzzleResponses } = useMoodStore();
+  const { 
+    recommendations, 
+    setRecommendations, 
+    setLoading: setMovieLoading,
+    selectedLanguages,
+  } = useMovieStore();
+  const { currentMoodAnalysis, puzzleResponses, setMoodAnalysis } = useMoodStore();
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (puzzleResponses.length > 0 && recommendations.length === 0) {
+    if (puzzleResponses.length > 0) {
       generateRecommendations();
     }
   }, [puzzleResponses]);
 
   const generateRecommendations = async () => {
     setLoading(true);
+    setMovieLoading(true);
+    setError(null);
 
-    // Simulate API call delay
-    setTimeout(() => {
-      // For demo purposes, we'll randomly select movies
-      // In a real app, this would use the mood analysis to filter movies
-      const shuffled = [...SAMPLE_MOVIES].sort(() => 0.5 - Math.random());
-      const selected = shuffled.slice(0, 8);
+    try {
+      let moodAnalysis = currentMoodAnalysis;
 
-      const movieRecommendations: MovieRecommendation[] = selected.map((movie, index) => ({
-        movie,
-        matchScore: Math.random() * 40 + 60, // Random score between 60-100
-        reason: getRecommendationReason(movie, currentMoodAnalysis?.primaryMood || 'happy')
-      }));
+      if (!moodAnalysis && puzzleResponses.length > 0) {
+        moodAnalysis = moodAnalyzer.analyzeMood(puzzleResponses);
+        setMoodAnalysis(moodAnalysis);
+      }
 
-      // Sort by match score
-      movieRecommendations.sort((a, b) => b.matchScore - a.matchScore);
+      if (!moodAnalysis) {
+        throw new Error('Unable to analyze mood');
+      }
+
+      const movieRecommendations = await recommendationEngine.generateRecommendations(
+        moodAnalysis,
+        puzzleResponses,
+        selectedLanguages.length > 0 ? selectedLanguages : ['en'],
+        20
+      );
 
       setRecommendations(movieRecommendations);
+    } catch (err) {
+      console.error('Error generating recommendations:', err);
+      setError('Failed to generate recommendations. Please try again.');
+    } finally {
       setLoading(false);
-    }, 1500);
-  };
-
-  const getRecommendationReason = (movie: Movie, mood: string): string => {
-    const reasons = {
-      energetic: `Perfect for your high energy mood with exciting ${movie.genre[0]} elements`,
-      calm: `Ideal for relaxation with its peaceful ${movie.genre[0]} storytelling`,
-      happy: `Matches your upbeat mood with feel-good ${movie.genre[0]} vibes`,
-      nostalgic: `Resonates with your reflective state through meaningful ${movie.genre[0]} themes`,
-      excited: `Channels your excitement with thrilling ${movie.genre[0]} adventure`,
-      thoughtful: `Complements your contemplative mood with deep ${movie.genre[0]} narrative`,
-      romantic: `Perfect for your loving mood with beautiful ${movie.genre[0]} elements`,
-      anxious: `Offers comfort and relief through uplifting ${movie.genre[0]} content`,
-    };
-
-    return reasons[mood as keyof typeof reasons] || `Great ${movie.genre[0]} choice for your current mood`;
+      setMovieLoading(false);
+    }
   };
 
   const handleMoviePress = (movie: Movie) => {
     router.push(`/movie/${movie.id}`);
+  };
+
+  const handleRetry = () => {
+    setError(null);
+    generateRecommendations();
+  };
+
+  const getSelectedLanguageNames = () => {
+    return LANGUAGES
+      .filter((lang) => selectedLanguages.includes(lang.code))
+      .map((lang) => lang.name)
+      .join(', ');
   };
 
   const renderMovieCard = ({ item }: { item: MovieRecommendation }) => (
@@ -70,7 +86,7 @@ export default function MoviesScreen() {
       onPress={() => handleMoviePress(item.movie)}
     >
       <Image
-        source={{ uri: item.movie.poster }}
+        source={{ uri: item.movie.poster || 'https://via.placeholder.com/300x450/cccccc/666666?text=No+Poster' }}
         style={styles.poster}
         resizeMode="cover"
       />
@@ -99,13 +115,32 @@ export default function MoviesScreen() {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#007AFF" />
         <Text style={styles.loadingText}>🎬 Analyzing your mood...</Text>
         <Text style={styles.loadingSubtext}>Finding perfect movies for you</Text>
       </View>
     );
   }
 
-  if (recommendations.length === 0) {
+  if (error) {
+    return (
+      <View style={styles.errorContainer}>
+        <Text style={styles.errorTitle}>😕 Oops!</Text>
+        <Text style={styles.errorText}>{error}</Text>
+        <Pressable style={styles.retryButton} onPress={handleRetry}>
+          <Text style={styles.retryButtonText}>Try Again</Text>
+        </Pressable>
+        <Pressable 
+          style={styles.startButton}
+          onPress={() => router.push('/puzzles')}
+        >
+          <Text style={styles.startButtonText}>Retake Puzzles</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
+  if (recommendations.length === 0 && puzzleResponses.length === 0) {
     return (
       <View style={styles.emptyContainer}>
         <Text style={styles.emptyTitle}>🧩 No Recommendations Yet</Text>
@@ -136,24 +171,38 @@ export default function MoviesScreen() {
             </Text>
           </View>
         )}
+        <View style={styles.languageInfo}>
+          <Text style={styles.languageInfoText}>
+            🌍 Languages: {getSelectedLanguageNames()}
+          </Text>
+        </View>
       </View>
 
-      <FlatList
-        data={recommendations}
-        renderItem={renderMovieCard}
-        keyExtractor={(item) => item.movie.id.toString()}
-        numColumns={2}
-        columnWrapperStyle={styles.row}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.moviesList}
-      />
+      {recommendations.length === 0 ? (
+        <View style={styles.noResultsContainer}>
+          <Text style={styles.noResultsText}>
+            No movies found for selected languages. Try retaking the puzzles with different language preferences.
+          </Text>
+        </View>
+      ) : (
+        <FlatList
+          data={recommendations}
+          renderItem={renderMovieCard}
+          keyExtractor={(item) => item.movie.id.toString()}
+          numColumns={2}
+          columnWrapperStyle={styles.row}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.moviesList}
+          scrollEnabled={false}
+        />
+      )}
 
       <View style={styles.actions}>
         <Pressable
-          style={styles.retakeButton}
+          style={styles.retakeButtonBottom}
           onPress={() => router.push('/puzzles')}
         >
-          <Text style={styles.retakeButtonText}>🔄 Retake Puzzles</Text>
+          <Text style={styles.retakeButtonBottomText}>🔄 Retake Puzzles</Text>
         </Pressable>
       </View>
     </ScrollView>
@@ -180,6 +229,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderLeftWidth: 4,
     borderLeftColor: '#007AFF',
+    marginBottom: 10,
   },
   moodText: {
     fontSize: 14,
@@ -190,6 +240,16 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#666',
     marginTop: 2,
+  },
+  languageInfo: {
+    backgroundColor: '#f0f0f0',
+    padding: 10,
+    borderRadius: 8,
+  },
+  languageInfoText: {
+    fontSize: 13,
+    color: '#666',
+    textAlign: 'center',
   },
   moviesList: {
     paddingHorizontal: 20,
@@ -270,12 +330,42 @@ const styles = StyleSheet.create({
   loadingText: {
     fontSize: 20,
     fontWeight: 'bold',
+    marginTop: 20,
     marginBottom: 10,
   },
   loadingSubtext: {
     fontSize: 16,
     color: '#666',
     textAlign: 'center',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  errorTitle: {
+    fontSize: 32,
+    marginBottom: 10,
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  retryButton: {
+    backgroundColor: '#FF3B30',
+    padding: 16,
+    borderRadius: 12,
+    minWidth: 150,
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  retryButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
   },
   emptyContainer: {
     flex: 1,
@@ -295,6 +385,16 @@ const styles = StyleSheet.create({
     marginBottom: 30,
     lineHeight: 22,
   },
+  noResultsContainer: {
+    padding: 40,
+    alignItems: 'center',
+  },
+  noResultsText: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+    lineHeight: 22,
+  },
   startButton: {
     backgroundColor: '#007AFF',
     padding: 16,
@@ -310,14 +410,14 @@ const styles = StyleSheet.create({
   actions: {
     padding: 20,
   },
-  retakeButton: {
+  retakeButtonBottom: {
     borderWidth: 2,
     borderColor: '#007AFF',
     padding: 16,
     borderRadius: 12,
     alignItems: 'center',
   },
-  retakeButtonText: {
+  retakeButtonBottomText: {
     color: '#007AFF',
     fontSize: 16,
     fontWeight: '600',

@@ -1,24 +1,42 @@
+// app/(tabs)/puzzles.tsx
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, ScrollView, View, Text, Pressable, Alert, Dimensions } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useMoodStore } from '@/store/useMoodStore';
+import { useMovieStore } from '@/store/useMovieStore';
 import ColorHarmonyPuzzle from '@/components/puzzle/ColorHarmonyPuzzle';
-import { PuzzleQuestion, PuzzleResponse } from '@/types/puzzle';
+import PatternCompletionPuzzle from '@/components/puzzle/PatternCompletionPuzzle';
+import StoryContextPuzzle from '@/components/puzzle/StoryContextPuzzle';
+import RhythmPuzzle from '@/components/puzzle/RhythmPuzzle';
+import ImageAssociationPuzzle from '@/components/puzzle/ImageAssociationPuzzle';
+import LanguageSelector from '@/components/movie/LanguageSelector';
+import { PuzzleResponse } from '@/types/puzzle';
 import { PUZZLES } from '@/constants/Puzzles';
+import { moodAnalyzer } from '@/services/moodAnalyzer';
 
 const { width } = Dimensions.get('window');
 
 export default function PuzzlesScreen() {
   const router = useRouter();
-  const { addPuzzleResponse, setAnalyzing } = useMoodStore();
+  const { addPuzzleResponse, setAnalyzing, setMoodAnalysis, resetPuzzleData } = useMoodStore();
+  const { selectedLanguages, setSelectedLanguages } = useMovieStore();
 
   const [currentPuzzleIndex, setCurrentPuzzleIndex] = useState(0);
   const [responses, setResponses] = useState<PuzzleResponse[]>([]);
   const [selectedOption, setSelectedOption] = useState<string>('');
   const [startTime, setStartTime] = useState<Date>(new Date());
+  const [showLanguageSelector, setShowLanguageSelector] = useState(false);
+  const [languageSelected, setLanguageSelected] = useState(false);
 
   const currentPuzzle = PUZZLES[currentPuzzleIndex];
   const progress = ((currentPuzzleIndex + 1) / PUZZLES.length) * 100;
+
+  useEffect(() => {
+    resetPuzzleData();
+    if (selectedLanguages.length === 0) {
+      setSelectedLanguages(['en']);
+    }
+  }, []);
 
   useEffect(() => {
     setStartTime(new Date());
@@ -29,7 +47,21 @@ export default function PuzzlesScreen() {
     setSelectedOption(optionId);
   };
 
+  const handleLanguageConfirm = () => {
+    if (selectedLanguages.length === 0) {
+      Alert.alert('Select Language', 'Please select at least one language to continue.');
+      return;
+    }
+    setLanguageSelected(true);
+    setShowLanguageSelector(false);
+  };
+
   const handleNext = () => {
+    if (!languageSelected) {
+      setShowLanguageSelector(true);
+      return;
+    }
+
     if (!selectedOption) {
       Alert.alert('Please select an option', 'Choose one of the options to continue.');
       return;
@@ -49,28 +81,27 @@ export default function PuzzlesScreen() {
     if (currentPuzzleIndex < PUZZLES.length - 1) {
       setCurrentPuzzleIndex(currentPuzzleIndex + 1);
     } else {
-      // All puzzles completed
-      handleComplete();
+      handleComplete(newResponses);
     }
   };
 
-  const handleComplete = () => {
+  const handleComplete = (allResponses: PuzzleResponse[]) => {
     setAnalyzing(true);
 
-    // Simulate mood analysis processing
     setTimeout(() => {
-      // In a real app, this would call your mood analysis service
+      const analysis = moodAnalyzer.analyzeMood(allResponses);
+      setMoodAnalysis(analysis);
       setAnalyzing(false);
       router.replace('/movies');
-    }, 2000);
+    }, 1500);
   };
 
   const handleBack = () => {
     if (currentPuzzleIndex > 0) {
       setCurrentPuzzleIndex(currentPuzzleIndex - 1);
-      // Remove the last response
       const newResponses = responses.slice(0, -1);
       setResponses(newResponses);
+      setSelectedOption(responses[responses.length - 1]?.selectedOption || '');
     } else {
       router.back();
     }
@@ -86,7 +117,38 @@ export default function PuzzlesScreen() {
             selectedOption={selectedOption}
           />
         );
-      // Add other puzzle types here
+      case 'pattern_completion':
+        return (
+          <PatternCompletionPuzzle
+            options={currentPuzzle.options}
+            onSelect={handleOptionSelect}
+            selectedOption={selectedOption}
+          />
+        );
+      case 'story_context':
+        return (
+          <StoryContextPuzzle
+            puzzle={currentPuzzle}
+            onSelect={handleOptionSelect}
+            selectedOption={selectedOption}
+          />
+        );
+      case 'rhythm_matching':
+        return (
+          <RhythmPuzzle
+            options={currentPuzzle.options}
+            onSelect={handleOptionSelect}
+            selectedOption={selectedOption}
+          />
+        );
+      case 'image_association':
+        return (
+          <ImageAssociationPuzzle
+            options={currentPuzzle.options}
+            onSelect={handleOptionSelect}
+            selectedOption={selectedOption}
+          />
+        );
       default:
         return (
           <View style={styles.puzzleContainer}>
@@ -123,7 +185,6 @@ export default function PuzzlesScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Progress Bar */}
       <View style={styles.progressContainer}>
         <View style={styles.progressBackground}>
           <View style={[styles.progressFill, { width: `${progress}%` }]} />
@@ -133,12 +194,24 @@ export default function PuzzlesScreen() {
         </Text>
       </View>
 
-      {/* Puzzle Content */}
+      {!languageSelected && (
+        <View style={styles.languagePrompt}>
+          <Text style={styles.languagePromptText}>
+            🌍 Please select your preferred movie language(s) first
+          </Text>
+          <Pressable 
+            style={styles.languagePromptButton}
+            onPress={() => setShowLanguageSelector(true)}
+          >
+            <Text style={styles.languagePromptButtonText}>Select Languages</Text>
+          </Pressable>
+        </View>
+      )}
+
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {renderPuzzle()}
       </ScrollView>
 
-      {/* Navigation */}
       <View style={styles.navigation}>
         <Pressable 
           style={[styles.navButton, styles.backButton]} 
@@ -151,19 +224,26 @@ export default function PuzzlesScreen() {
           style={[
             styles.navButton, 
             styles.nextButton,
-            !selectedOption && styles.disabledButton
+            (!selectedOption || !languageSelected) && styles.disabledButton
           ]} 
           onPress={handleNext}
-          disabled={!selectedOption}
+          disabled={!selectedOption || !languageSelected}
         >
           <Text style={[
             styles.nextButtonText,
-            !selectedOption && styles.disabledButtonText
+            (!selectedOption || !languageSelected) && styles.disabledButtonText
           ]}>
             {currentPuzzleIndex < PUZZLES.length - 1 ? 'Next →' : 'Complete'}
           </Text>
         </Pressable>
       </View>
+
+      <LanguageSelector
+        selectedLanguages={selectedLanguages}
+        onLanguagesChange={setSelectedLanguages}
+        visible={showLanguageSelector}
+        onClose={handleLanguageConfirm}
+      />
     </View>
   );
 }
@@ -194,6 +274,32 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
     fontWeight: '500',
+  },
+  languagePrompt: {
+    marginHorizontal: 20,
+    marginBottom: 15,
+    padding: 15,
+    backgroundColor: '#fff3cd',
+    borderRadius: 12,
+    borderLeftWidth: 4,
+    borderLeftColor: '#ffc107',
+  },
+  languagePromptText: {
+    fontSize: 14,
+    color: '#856404',
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  languagePromptButton: {
+    backgroundColor: '#007AFF',
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  languagePromptButtonText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '600',
   },
   content: {
     flex: 1,
