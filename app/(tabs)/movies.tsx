@@ -1,277 +1,302 @@
-// app/(tabs)/movies.tsx (Updated to use language filtering)
-import React, { useEffect, useState } from 'react';
-import { StyleSheet, FlatList, View, Text, Pressable, ActivityIndicator, TextInput } from 'react-native';
-import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+// app/(tabs)/movies.tsx (Fixed - Add Language Filter)
+import React, { useState, useEffect } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  FlatList,
+  Dimensions,
+} from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 import { useMovieStore } from '@/store/useMovieStore';
 import { useMoodStore } from '@/store/useMoodStore';
-import { useFavoriteStore } from '@/store/useFavoriteStore';
-import { useSettingsStore } from '@/store/useSettingsStore';
-import { Movie } from '@/types/movie';
 import { movieService } from '@/services/movieService';
+import { useMovieRecommendations } from '@/hooks/useMovieRecommendations';
 import MovieCard from '@/components/movie/MovieCard';
-import GenreSelector from '@/components/movie/GenreSelector';
+import SearchBar from '@/components/movie/SearchBar';
 import LanguageSelector from '@/components/movie/LanguageSelector';
+import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
+import { Button } from '@/components/ui/Button';
+import { Ionicons } from '@expo/vector-icons';
+
+const { width } = Dimensions.get('window');
+
+const CATEGORIES = [
+  { id: 'recommendations', title: 'Recommendations', icon: '🎯' },
+  { id: 'popular', title: 'Popular', icon: '🔥' },
+  { id: 'toprated', title: 'Top Rated', icon: '⭐' },
+  { id: 'nowplaying', title: 'Now Playing', icon: '🎬' },
+  { id: 'upcoming', title: 'Upcoming', icon: '📅' },
+];
 
 export default function MoviesScreen() {
-  const router = useRouter();
-  const { 
-    recommendations, 
-    setRecommendations, 
-    setLoading: setMovieLoading,
-    selectedLanguages,
-    selectedGenres,
-  } = useMovieStore();
-  const { currentMoodAnalysis } = useMoodStore();
-  const { favorites } = useFavoriteStore();
-  const { profile } = useSettingsStore();
-  
+  const [activeCategory, setActiveCategory] = useState('recommendations');
+  const [movies, setMovies] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<Movie[]>([]);
-  const [showFilters, setShowFilters] = useState(false);
+  const [selectedLanguages, setSelectedLanguages] = useState(['all']);
+  const [showLanguageModal, setShowLanguageModal] = useState(false);
+
+  const { currentMoodAnalysis } = useMoodStore();
+  const { recommendations, searchResults, setSearchResults } = useMovieStore();
+  const { generateRecommendations, refreshRecommendations } = useMovieRecommendations();
 
   useEffect(() => {
     loadMovies();
-  }, [selectedLanguages, selectedGenres]);
-
-  useEffect(() => {
-    if (searchQuery.length > 2) {
-      searchMovies();
-    } else {
-      setSearchResults([]);
-    }
-  }, [searchQuery, selectedLanguages]);
+  }, [activeCategory, selectedLanguages]);
 
   const loadMovies = async () => {
-    setLoading(true);
-    setMovieLoading(true);
-    setError(null);
-
-    try {
-      console.log('Loading movies for languages:', selectedLanguages);
-      
-      let movies: Movie[] = [];
-
-      if (selectedGenres.length > 0) {
-        // Get movies by genre and language
-        for (const genreId of selectedGenres) {
-          const genreMovies = await movieService.getMoviesByGenre(genreId, 1, selectedLanguages);
-          movies = [...movies, ...genreMovies];
+    if (activeCategory === 'recommendations') {
+      if (!Array.isArray(recommendations) || recommendations.length === 0) {
+        if (currentMoodAnalysis) {
+          await generateRecommendations();
+        } else {
+          setMovies([]);
         }
-      } else {
-        // Get popular movies for selected languages
-        movies = await movieService.getPopularMovies(1, selectedLanguages);
+        return;
       }
+      let filteredMovies = recommendations.map(r => r.movie) || [];
+      
+      // Filter by language if not 'all'
+      if (!selectedLanguages.includes('all') && selectedLanguages.length > 0) {
+        filteredMovies = filteredMovies.filter(movie => 
+          selectedLanguages.includes(movie.language?.toLowerCase() || 'en')
+        );
+      }
+      
+      setMovies(filteredMovies);
+      return;
+    }
 
-      const filtered = movieService.filterMoviesByAge(movies);
-      const movieRecommendations = filtered.map(movie => ({
-        movie,
-        matchScore: Math.floor(Math.random() * 30) + 70,
-        reason: `${movie.language.toUpperCase()} ${currentMoodAnalysis ? currentMoodAnalysis.primaryMood : 'Popular'} pick`
-      }));
-
-      // Remove duplicates based on movie ID
-      const uniqueRecommendations = movieRecommendations.filter((rec, index, self) =>
-        index === self.findIndex(r => r.movie.id === rec.movie.id)
-      );
-
-      const favoriteIds = favorites.map(f => f.id);
-      const filteredRecommendations = uniqueRecommendations.filter(
-        rec => !favoriteIds.includes(rec.movie.id)
-      );
-
-      console.log(`Found ${filteredRecommendations.length} movies for languages:`, selectedLanguages);
-      setRecommendations(filteredRecommendations);
-    } catch (err) {
-      console.error('Error loading movies:', err);
-      setError('Failed to load movies. Please try again.');
+    setLoading(true);
+    try {
+      let result = [];
+      switch (activeCategory) {
+        case 'popular':
+          result = await movieService.getPopularMovies();
+          break;
+        case 'toprated':
+          result = await movieService.getTopRatedMovies();
+          break;
+        case 'nowplaying':
+          result = await movieService.getNowPlayingMovies();
+          break;
+        case 'upcoming':
+          result = await movieService.getUpcomingMovies();
+          break;
+        default:
+          result = [];
+      }
+      
+      // Filter by language if not 'all'
+      if (!selectedLanguages.includes('all') && selectedLanguages.length > 0) {
+        result = result.filter(movie => 
+          selectedLanguages.includes(movie.language?.toLowerCase() || 'en')
+        );
+      }
+      
+      setMovies(Array.isArray(result) ? result : []);
+    } catch (error) {
+      console.error('Error loading movies:', error);
+      setMovies([]);
     } finally {
       setLoading(false);
-      setMovieLoading(false);
     }
   };
 
-  const searchMovies = async () => {
-    if (searchQuery.length <= 2) return;
-    
+  const handleSearch = async (query) => {
+    setSearchQuery(query || '');
+    if (!query || typeof query !== 'string' || !query.trim()) {
+      setSearchResults([]);
+      return;
+    }
+
     try {
-      console.log('Searching movies:', searchQuery, 'in languages:', selectedLanguages);
-      const results = await movieService.searchMovies(searchQuery, 1, selectedLanguages);
-      const filtered = movieService.filterMoviesByAge(results);
-      const favoriteIds = favorites.map(f => f.id);
-      const excludingFavorites = movieService.filterExcludingFavorites(filtered, favoriteIds);
-      console.log(`Search found ${excludingFavorites.length} results`);
-      setSearchResults(excludingFavorites);
+      const results = await movieService.searchMovies(query.trim());
+      let filteredResults = Array.isArray(results) ? results : [];
+      
+      // Filter search results by language
+      if (!selectedLanguages.includes('all') && selectedLanguages.length > 0) {
+        filteredResults = filteredResults.filter(movie => 
+          selectedLanguages.includes(movie.language?.toLowerCase() || 'en')
+        );
+      }
+      
+      setSearchResults(filteredResults);
     } catch (error) {
-      console.error('Search failed:', error);
+      console.error('Error searching movies:', error);
+      setSearchResults([]);
     }
   };
 
-  const getSelectedLanguageNames = () => {
-    const LANGUAGES = [
-      { code: 'en', name: 'English' },
-      { code: 'hi', name: 'Hindi' },
-      { code: 'ja', name: 'Japanese' },
-      { code: 'ko', name: 'Korean' },
-      { code: 'fr', name: 'French' },
-      { code: 'es', name: 'Spanish' },
-      { code: 'de', name: 'German' },
-      { code: 'it', name: 'Italian' },
-    ];
-    
-    return LANGUAGES
-      .filter(lang => selectedLanguages.includes(lang.code))
-      .map(lang => lang.name)
-      .join(', ');
+  const handleCategoryPress = (categoryId) => {
+    setActiveCategory(categoryId);
+    setSearchQuery('');
+    setSearchResults([]);
   };
 
-  const moviesToDisplay = searchQuery.length > 2 ? searchResults : recommendations.map(r => r.movie);
+  const handleLanguageToggle = (languageCode) => {
+    if (languageCode === 'all') {
+      setSelectedLanguages(['all']);
+    } else {
+      setSelectedLanguages(prev => {
+        const filtered = prev.filter(lang => lang !== 'all');
+        if (filtered.includes(languageCode)) {
+          const newLangs = filtered.filter(lang => lang !== languageCode);
+          return newLangs.length === 0 ? ['all'] : newLangs;
+        } else {
+          return [...filtered, languageCode];
+        }
+      });
+    }
+  };
+
+  const handleRefresh = async () => {
+    if (activeCategory === 'recommendations') {
+      await refreshRecommendations();
+    } else {
+      await loadMovies();
+    }
+  };
+
+  const getDisplayMovies = () => {
+    if (searchQuery && Array.isArray(searchResults)) {
+      return searchResults;
+    }
+    return Array.isArray(movies) ? movies : [];
+  };
+
+  const getEmptyMessage = () => {
+    if (searchQuery) {
+      return 'No movies found for your search';
+    }
+    if (activeCategory === 'recommendations' && !currentMoodAnalysis) {
+      return 'Complete mood puzzles to get recommendations';
+    }
+    if (!selectedLanguages.includes('all') && selectedLanguages.length > 0) {
+      return `No movies found for selected language(s)`;
+    }
+    return 'No movies available';
+  };
+
+  const displayMovies = getDisplayMovies();
 
   const renderHeader = () => (
-    <>
-      {/* Search Bar */}
-      <View style={styles.searchContainer}>
-        <Ionicons name="search" size={20} color="#666" style={styles.searchIcon} />
-        <TextInput
-          style={styles.searchInput}
-          placeholder={`Search movies in ${getSelectedLanguageNames()}...`}
+    <View>
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Movies</Text>
+        <SearchBar
+          onSearch={handleSearch}
           value={searchQuery}
           onChangeText={setSearchQuery}
-          placeholderTextColor="#666"
         />
-        {searchQuery.length > 0 && (
-          <Pressable onPress={() => setSearchQuery('')}>
-            <Ionicons name="close-circle" size={20} color="#666" />
-          </Pressable>
-        )}
       </View>
 
-      {/* Filter Button */}
-      <Pressable 
-        style={styles.filterButton} 
-        onPress={() => setShowFilters(!showFilters)}
-      >
-        <Ionicons name="options" size={20} color="#007AFF" />
-        <Text style={styles.filterButtonText}>Filters & Languages</Text>
-      </Pressable>
-
-      {/* Language Info */}
-      <View style={styles.languageInfo}>
-        <Text style={styles.languageInfoText}>
-          🌍 Showing: {getSelectedLanguageNames()} movies ({moviesToDisplay.length} found)
-        </Text>
-      </View>
-
-      {/* Filters */}
-      {showFilters && (
-        <View style={styles.filtersContainer}>
-          <LanguageSelector />
-          <GenreSelector />
+      {!searchQuery && (
+        <View style={styles.tabsContainer}>
+          <FlatList
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            data={CATEGORIES}
+            keyExtractor={(category) => category.id}
+            contentContainerStyle={styles.tabsContent}
+            renderItem={({ item: category }) => (
+              <TouchableOpacity
+                style={[
+                  styles.tab,
+                  activeCategory === category.id && styles.activeTab,
+                ]}
+                onPress={() => handleCategoryPress(category.id)}
+              >
+                <Text style={styles.tabIcon}>{category.icon}</Text>
+                <Text style={[
+                  styles.tabText,
+                  activeCategory === category.id && styles.activeTabText,
+                ]}>
+                  {category.title}
+                </Text>
+              </TouchableOpacity>
+            )}
+          />
         </View>
       )}
 
-      {/* Current Mood Indicator */}
-      {currentMoodAnalysis && searchQuery.length === 0 && (
-        <View style={styles.moodIndicator}>
-          <Text style={styles.moodText}>
-            Based on your {currentMoodAnalysis.primaryMood} mood
-          </Text>
-          <Text style={styles.confidenceText}>
-            {Math.round(currentMoodAnalysis.confidence * 100)}% confidence
-          </Text>
-        </View>
-      )}
-
-      {/* Age Filter Info */}
-      {profile.age < 18 && (
-        <View style={styles.ageFilterInfo}>
-          <Text style={styles.ageFilterText}>
-            Showing age-appropriate content for {profile.age} years old
-          </Text>
-        </View>
-      )}
-    </>
-  );
-
-  const renderFooter = () => (
-    <>
-      {recommendations.length > 0 && searchQuery.length === 0 && (
-        <View style={styles.actions}>
-          <Pressable 
-            style={styles.retakeButton} 
-            onPress={() => router.push('/puzzles')}
-          >
-            <Ionicons name="refresh" size={20} color="#007AFF" />
-            <Text style={styles.retakeButtonText}>🔄 Retake Puzzles</Text>
-          </Pressable>
-        </View>
-      )}
-    </>
-  );
-
-  const renderEmpty = () => (
-    <View style={styles.emptyContainer}>
-      <Text style={styles.emptyTitle}>
-        {searchQuery.length > 2 ? '🔍 No Search Results' : '🎬 No Movies Found'}
-      </Text>
-      <Text style={styles.emptyText}>
-        {searchQuery.length > 2 
-          ? `No movies found for "${searchQuery}" in ${getSelectedLanguageNames()}.`
-          : `No movies available for ${getSelectedLanguageNames()}. Try selecting different languages.`
-        }
-      </Text>
-      {searchQuery.length === 0 && (
-        <Pressable 
-          style={styles.startButton} 
-          onPress={() => setShowFilters(true)}
+      {/* Language Filter */}
+      <View style={styles.filterContainer}>
+        <TouchableOpacity 
+          style={styles.languageFilterButton}
+          onPress={() => setShowLanguageModal(true)}
         >
-          <Text style={styles.startButtonText}>Change Languages</Text>
-        </Pressable>
+          <Ionicons name="language" size={20} color="#007AFF" />
+          <Text style={styles.languageFilterText}>
+            {selectedLanguages.includes('all') 
+              ? 'All Languages' 
+              : `${selectedLanguages.length} Language${selectedLanguages.length > 1 ? 's' : ''}`
+            }
+          </Text>
+          <Ionicons name="chevron-down" size={16} color="#007AFF" />
+        </TouchableOpacity>
+      </View>
+
+      {activeCategory === 'recommendations' && !currentMoodAnalysis && !searchQuery && (
+        <View style={styles.noMoodContainer}>
+          <Text style={styles.noMoodText}>
+            Complete mood puzzles to get personalized recommendations
+          </Text>
+          <Button
+            title="Take Mood Puzzle"
+            onPress={() => {
+              // Navigate to puzzles tab
+            }}
+            style={styles.puzzleButton}
+          />
+        </View>
       )}
     </View>
   );
 
-  if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
-        <Text style={styles.loadingText}>🎬 Loading {getSelectedLanguageNames()} movies...</Text>
-        <Text style={styles.loadingSubtext}>Finding the best content for you</Text>
-      </View>
-    );
-  }
+  const renderMovieItem = ({ item, index }) => (
+    <View style={[styles.movieWrapper, index % 2 === 1 && styles.movieWrapperRight]}>
+      <MovieCard movie={item} showFavoriteButton={true} />
+    </View>
+  );
 
-  if (error) {
-    return (
-      <View style={styles.errorContainer}>
-        <Text style={styles.errorTitle}>😕 Oops!</Text>
-        <Text style={styles.errorText}>{error}</Text>
-        <Pressable style={styles.retryButton} onPress={loadMovies}>
-          <Text style={styles.retryButtonText}>Try Again</Text>
-        </Pressable>
-      </View>
-    );
-  }
+  const renderEmpty = () => (
+    <View style={styles.emptyContainer}>
+      <Ionicons name="film-outline" size={80} color="#ccc" />
+      <Text style={styles.emptyTitle}>No Movies Found</Text>
+      <Text style={styles.emptyText}>{getEmptyMessage()}</Text>
+    </View>
+  );
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>🎬 Discover Movies</Text>
-      </View>
-
+      <StatusBar style="auto" />
+      
       <FlatList
-        data={moviesToDisplay}
-        renderItem={({ item }) => <MovieCard movie={item} showFavoriteButton={true} />}
-        keyExtractor={(item) => item.id.toString()}
+        data={displayMovies}
+        keyExtractor={(item, index) => `movie-${item.id}-${index}`}
+        renderItem={renderMovieItem}
         numColumns={2}
-        columnWrapperStyle={styles.row}
         ListHeaderComponent={renderHeader}
-        ListFooterComponent={renderFooter}
-        ListEmptyComponent={renderEmpty}
-        contentContainerStyle={styles.listContainer}
+        ListEmptyComponent={!loading ? renderEmpty : null}
+        ListFooterComponent={loading ? <LoadingSpinner style={styles.loader} /> : null}
         showsVerticalScrollIndicator={false}
+        onRefresh={handleRefresh}
+        refreshing={loading}
+        contentContainerStyle={styles.listContent}
+        style={styles.list}
+        removeClippedSubviews={true}
+        maxToRenderPerBatch={10}
+        windowSize={10}
+      />
+
+      <LanguageSelector
+        selectedLanguages={selectedLanguages}
+        onLanguageToggle={handleLanguageToggle}
+        showModal={showLanguageModal}
+        onCloseModal={() => setShowLanguageModal(false)}
       />
     </View>
   );
@@ -280,207 +305,129 @@ export default function MoviesScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#f9f9f9',
+  },
+  list: {
+    flex: 1,
+  },
+  listContent: {
+    paddingBottom: 120, // Add extra padding for tab bar
   },
   header: {
-    padding: 20,
     paddingTop: 60,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    textAlign: 'center',
-  },
-  listContainer: {
     paddingBottom: 20,
+    backgroundColor: '#fff',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#e0e0e0',
   },
-  row: {
-    justifyContent: 'space-between',
+  headerTitle: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#333',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  tabsContainer: {
+    backgroundColor: '#fff',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#e0e0e0',
+  },
+  tabsContent: {
     paddingHorizontal: 20,
+    paddingVertical: 16,
   },
-  searchContainer: {
+  tab: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f5f5f5',
-    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    marginRight: 12,
+    borderRadius: 20,
+    backgroundColor: '#f0f0f0',
+  },
+  activeTab: {
+    backgroundColor: '#007AFF',
+  },
+  tabIcon: {
+    fontSize: 16,
+    marginRight: 6,
+  },
+  tabText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#666',
+  },
+  activeTabText: {
+    color: '#fff',
+  },
+  filterContainer: {
+    backgroundColor: '#fff',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#e0e0e0',
+  },
+  languageFilterButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 12,
     paddingVertical: 8,
-    marginHorizontal: 20,
-    marginTop: 16,
-    marginBottom: 12,
-  },
-  searchIcon: {
-    marginRight: 8,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 16,
-    color: '#333',
-  },
-  filterButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#f0f0f0',
-    padding: 12,
-    borderRadius: 8,
-    marginHorizontal: 20,
-    marginBottom: 12,
-  },
-  filterButtonText: {
-    color: '#007AFF',
-    fontWeight: '500',
-    marginLeft: 8,
-  },
-  languageInfo: {
-    backgroundColor: '#e3f2fd',
-    padding: 12,
-    marginHorizontal: 20,
-    marginBottom: 12,
-    borderRadius: 8,
+    backgroundColor: '#f0f8ff',
+    borderRadius: 20,
     borderWidth: 1,
-    borderColor: '#90caf9',
+    borderColor: '#007AFF',
+    alignSelf: 'flex-start',
   },
-  languageInfoText: {
-    fontSize: 13,
-    color: '#1565c0',
-    textAlign: 'center',
-    fontWeight: '500',
-  },
-  filtersContainer: {
-    backgroundColor: '#f8f9fa',
-    padding: 16,
-    marginHorizontal: 20,
-    marginBottom: 12,
-    borderRadius: 8,
-  },
-  moodIndicator: {
-    backgroundColor: 'rgba(0, 122, 255, 0.1)',
-    padding: 12,
-    marginHorizontal: 20,
-    marginBottom: 12,
-    borderRadius: 8,
-    borderLeftWidth: 4,
-    borderLeftColor: '#007AFF',
-  },
-  moodText: {
+  languageFilterText: {
+    marginHorizontal: 8,
     fontSize: 14,
-    fontWeight: '600',
     color: '#007AFF',
+    fontWeight: '500',
   },
-  confidenceText: {
-    fontSize: 12,
-    color: '#666',
-    marginTop: 2,
-  },
-  ageFilterInfo: {
-    backgroundColor: '#fff3cd',
-    padding: 12,
-    marginHorizontal: 20,
-    marginBottom: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#ffeaa7',
-  },
-  ageFilterText: {
-    fontSize: 12,
-    color: '#856404',
-    textAlign: 'center',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
+  noMoodContainer: {
+    padding: 40,
     alignItems: 'center',
-    padding: 20,
+    backgroundColor: '#fff',
   },
-  loadingText: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginTop: 20,
-    marginBottom: 10,
-    textAlign: 'center',
-  },
-  loadingSubtext: {
-    fontSize: 16,
-    color: '#666',
-    textAlign: 'center',
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  errorTitle: {
-    fontSize: 32,
-    marginBottom: 10,
-  },
-  errorText: {
+  noMoodText: {
     fontSize: 16,
     color: '#666',
     textAlign: 'center',
     marginBottom: 20,
+    lineHeight: 22,
   },
-  retryButton: {
-    backgroundColor: '#FF3B30',
-    padding: 16,
-    borderRadius: 12,
-    minWidth: 150,
-    alignItems: 'center',
+  puzzleButton: {
+    paddingHorizontal: 24,
   },
-  retryButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
+  movieWrapper: {
+    flex: 1,
+    paddingLeft: 20,
+    paddingRight: 10,
+    marginBottom: 16,
+  },
+  movieWrapperRight: {
+    paddingLeft: 10,
+    paddingRight: 20,
   },
   emptyContainer: {
-    padding: 40,
+    padding: 60,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   emptyTitle: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: 'bold',
-    marginBottom: 10,
-    textAlign: 'center',
+    color: '#333',
+    marginTop: 16,
+    marginBottom: 8,
   },
   emptyText: {
     fontSize: 16,
     color: '#666',
     textAlign: 'center',
-    marginBottom: 30,
     lineHeight: 22,
   },
-  startButton: {
-    backgroundColor: '#007AFF',
-    padding: 16,
-    borderRadius: 12,
-    minWidth: 150,
-    alignItems: 'center',
-  },
-  startButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  actions: {
-    padding: 20,
-  },
-  retakeButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: '#007AFF',
-    padding: 16,
-    borderRadius: 12,
-  },
-  retakeButtonText: {
-    color: '#007AFF',
-    fontSize: 16,
-    fontWeight: '600',
-    marginLeft: 8,
+  loader: {
+    marginVertical: 20,
   },
 });
