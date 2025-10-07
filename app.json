@@ -3,33 +3,40 @@
     "name": "MoodFlix",
     "slug": "moodflix-app",
     "version": "1.0.0",
+    "sdkVersion": "54.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
-    "scheme": "myapp",
-    "userInterfaceStyle": "automatic",
-    "splash": { "image": "./assets/images/splash.png" },
+    "icon": null,
+    "scheme": "moodflix",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": null,
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
     "assetBundlePatterns": [
       "**/*"
     ],
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.moodflix.app"
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
-      }
+      },
+      "package": "com.moodflix.app"
     },
     "web": {
-      "bundler": "metro",
-      "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/favicon.png"
     },
     "plugins": [
       "expo-router"
     ],
-    "experiments": {
-      "typedRoutes": true
+    "extra": {
+      "router": {
+        "origin": false
+      }
     }
   }
 }

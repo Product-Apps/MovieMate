@@ -4,20 +4,34 @@
     "strict": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"],
-      "@/components/*": ["./components/*"],
-      "@/types/*": ["./types/*"],
-      "@/store/*": ["./store/*"],
-      "@/services/*": ["./services/*"],
-      "@/utils/*": ["./utils/*"],
-      "@/hooks/*": ["./hooks/*"],
-      "@/constants/*": ["./constants/*"]
+      "@/*": [
+        "./src/*"
+      ],
+      "@/components/*": [
+        "./components/*"
+      ],
+      "@/types/*": [
+        "./types/*"
+      ],
+      "@/store/*": [
+        "./store/*"
+      ],
+      "@/services/*": [
+        "./services/*"
+      ],
+      "@/utils/*": [
+        "./utils/*"
+      ],
+      "@/hooks/*": [
+        "./hooks/*"
+      ],
+      "@/constants/*": [
+        "./constants/*"
+      ]
     }
   },
   "include": [
     "**/*.ts",
-    "**/*.tsx",
-    ".expo/types/**/*.ts",
-    "expo-env.d.ts"
+    "**/*.tsx"
   ]
 }

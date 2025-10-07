@@ -1,180 +1,120 @@
 // components/movie/GenreSelector.tsx
 import React from 'react';
-import { StyleSheet, View, Text, Pressable, ScrollView, Modal } from 'react-native';
-import { GENRES } from '@/constants/Languages';
+import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
+import { useMovieStore } from '@/store/useMovieStore';
 
-interface GenreSelectorProps {
-  selectedGenres: number[];
-  onGenresChange: (genres: number[]) => void;
-  visible: boolean;
-  onClose: () => void;
-}
+const GENRES = [
+  { id: 28, name: 'Action' },
+  { id: 12, name: 'Adventure' },
+  { id: 16, name: 'Animation' },
+  { id: 35, name: 'Comedy' },
+  { id: 80, name: 'Crime' },
+  { id: 99, name: 'Documentary' },
+  { id: 18, name: 'Drama' },
+  { id: 10751, name: 'Family' },
+  { id: 14, name: 'Fantasy' },
+  { id: 36, name: 'History' },
+  { id: 27, name: 'Horror' },
+  { id: 10402, name: 'Music' },
+  { id: 9648, name: 'Mystery' },
+  { id: 10749, name: 'Romance' },
+  { id: 878, name: 'Sci-Fi' },
+  { id: 53, name: 'Thriller' },
+  { id: 10752, name: 'War' },
+  { id: 37, name: 'Western' },
+];
 
-export default function GenreSelector({
-  selectedGenres,
-  onGenresChange,
-  visible,
-  onClose,
-}: GenreSelectorProps) {
+export default function GenreSelector() {
+  const { selectedGenres, setSelectedGenres } = useMovieStore();
+
   const toggleGenre = (genreId: number) => {
     if (selectedGenres.includes(genreId)) {
-      onGenresChange(selectedGenres.filter((g) => g !== genreId));
+      setSelectedGenres(selectedGenres.filter(id => id !== genreId));
     } else {
-      onGenresChange([...selectedGenres, genreId]);
+      setSelectedGenres([...selectedGenres, genreId]);
     }
   };
 
-  const selectAll = () => {
-    onGenresChange(GENRES.map((g) => g.id));
-  };
-
   const clearAll = () => {
-    onGenresChange([]);
+    setSelectedGenres([]);
   };
 
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      presentationStyle="pageSheet"
-      onRequestClose={onClose}
-    >
-      <View style={styles.container}>
-        <View style={styles.header}>
-          <Text style={styles.title}>Select Genres</Text>
-          <Pressable onPress={onClose} style={styles.closeButton}>
-            <Text style={styles.closeButtonText}>Done</Text>
+    <View style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.title}>Genres</Text>
+        {selectedGenres.length > 0 && (
+          <Pressable onPress={clearAll}>
+            <Text style={styles.clearText}>Clear All</Text>
           </Pressable>
-        </View>
-
-        <View style={styles.actions}>
-          <Pressable onPress={selectAll} style={styles.actionButton}>
-            <Text style={styles.actionButtonText}>Select All</Text>
-          </Pressable>
-          <Pressable onPress={clearAll} style={styles.actionButton}>
-            <Text style={styles.actionButtonText}>Clear All</Text>
-          </Pressable>
-        </View>
-
-        <ScrollView style={styles.genresList} showsVerticalScrollIndicator={false}>
-          <View style={styles.genreGrid}>
-            {GENRES.map((genre) => {
-              const isSelected = selectedGenres.includes(genre.id);
-              return (
-                <Pressable
-                  key={genre.id}
-                  style={[styles.genreChip, isSelected && styles.selectedGenreChip]}
-                  onPress={() => toggleGenre(genre.id)}
-                >
-                  <Text style={[styles.genreText, isSelected && styles.selectedGenreText]}>
-                    {genre.name}
-                  </Text>
-                  {isSelected && <Text style={styles.checkmark}>✓</Text>}
-                </Pressable>
-              );
-            })}
-          </View>
-        </ScrollView>
-
-        <View style={styles.footer}>
-          <Text style={styles.selectedCount}>
-            {selectedGenres.length} genre{selectedGenres.length !== 1 ? 's' : ''} selected
-          </Text>
-        </View>
+        )}
       </View>
-    </Modal>
+      
+      <ScrollView 
+        horizontal 
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContainer}
+      >
+        {GENRES.map((genre) => (
+          <Pressable
+            key={genre.id}
+            style={[
+              styles.genreButton,
+              selectedGenres.includes(genre.id) && styles.genreButtonActive
+            ]}
+            onPress={() => toggleGenre(genre.id)}
+          >
+            <Text style={[
+              styles.genreText,
+              selectedGenres.includes(genre.id) && styles.genreTextActive
+            ]}>
+              {genre.name}
+            </Text>
+          </Pressable>
+        ))}
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
-    backgroundColor: '#fff',
+    marginBottom: 16,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 20,
-    paddingTop: 60,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
+    marginBottom: 8,
   },
   title: {
-    fontSize: 20,
-    fontWeight: 'bold',
+    fontSize: 16,
+    fontWeight: '600',
     color: '#333',
   },
-  closeButton: {
-    padding: 8,
-  },
-  closeButtonText: {
-    fontSize: 16,
-    color: '#007AFF',
-    fontWeight: '600',
-  },
-  actions: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    padding: 15,
-    backgroundColor: '#f8f9fa',
-  },
-  actionButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 20,
-  },
-  actionButtonText: {
+  clearText: {
     fontSize: 14,
     color: '#007AFF',
-    fontWeight: '500',
   },
-  genresList: {
-    flex: 1,
+  scrollContainer: {
+    paddingRight: 20,
   },
-  genreGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    padding: 15,
-    gap: 10,
-  },
-  genreChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 20,
+  genreButton: {
     backgroundColor: '#f0f0f0',
-    borderWidth: 2,
-    borderColor: '#e0e0e0',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    marginRight: 8,
   },
-  selectedGenreChip: {
-    backgroundColor: '#e3f2fd',
-    borderColor: '#007AFF',
+  genreButtonActive: {
+    backgroundColor: '#007AFF',
   },
   genreText: {
-    fontSize: 14,
-    color: '#333',
+    fontSize: 12,
+    color: '#666',
     fontWeight: '500',
   },
-  selectedGenreText: {
-    color: '#007AFF',
-    fontWeight: '600',
-  },
-  checkmark: {
-    fontSize: 14,
-    color: '#007AFF',
-    fontWeight: 'bold',
-  },
-  footer: {
-    padding: 20,
-    borderTopWidth: 1,
-    borderTopColor: '#e0e0e0',
-    backgroundColor: '#f8f9fa',
-  },
-  selectedCount: {
-    fontSize: 14,
-    color: '#666',
-    textAlign: 'center',
+  genreTextActive: {
+    color: '#fff',
   },
 });
