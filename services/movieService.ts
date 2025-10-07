@@ -2,413 +2,126 @@ import axios from 'axios';
 import Constants from 'expo-constants';
 import { Movie, TMDBMovie, TMDBResponse } from '@/types/movie';
 
-const TMDB_BEARER_TOKEN = Constants.expoConfig?.extra?.tmdbBearerToken || process.env.EXPO_PUBLIC_TMDB_BEARER_TOKEN || '';
+const TMDB_API_KEY = Constants.expoConfig?.extra?.tmdbApiKey || process.env.EXPO_PUBLIC_TMDB_API_KEY || '';
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
 const TMDB_IMAGE_BASE_URL = 'https://image.tmdb.org/t/p/w500';
 
-const MOCK_MOVIES: TMDBMovie[] = [
-  {
-    id: 278,
-    title: 'The Shawshank Redemption',
-    overview: 'Framed in the 1940s for the double murder of his wife and her lover, upstanding banker Andy Dufresne begins a new life at the Shawshank prison.',
-    poster_path: '/q6y0Go1tsGEsmtFryDOJo3dEmqu.jpg',
-    backdrop_path: '/kXfqcdQKsToO0OUXHcrrNCHDBzO.jpg',
-    release_date: '1994-09-23',
-    genre_ids: [18, 80],
-    vote_average: 8.7,
-    vote_count: 24000,
-    adult: false,
-    original_language: 'en',
-    original_title: 'The Shawshank Redemption',
-    popularity: 95.4,
-    video: false,
-  },
-  {
-    id: 238,
-    title: 'The Godfather',
-    overview: 'Spanning the years 1945 to 1955, a chronicle of the fictional Italian-American Corleone crime family.',
-    poster_path: '/3bhkrj58Vtu7enYsRolD1fZdja1.jpg',
-    backdrop_path: '/tmU7GeKVybMWFButWEGl2M4GeiP.jpg',
-    release_date: '1972-03-14',
-    genre_ids: [18, 80],
-    vote_average: 8.7,
-    vote_count: 18000,
-    adult: false,
-    original_language: 'en',
-    original_title: 'The Godfather',
-    popularity: 90.1,
-    video: false,
-  },
-  {
-    id: 240,
-    title: 'The Godfather Part II',
-    overview: 'In the continuing saga of the Corleone crime family, a young Vito Corleone grows up in Sicily.',
-    poster_path: '/hek3koDUyRQk7FIhPXsa6mT2Zc3.jpg',
-    backdrop_path: '/kGzFbGhp99zva6oZODW5atUtnqi.jpg',
-    release_date: '1974-12-20',
-    genre_ids: [18, 80],
-    vote_average: 8.6,
-    vote_count: 11000,
-    adult: false,
-    original_language: 'en',
-    original_title: 'The Godfather Part II',
-    popularity: 85.3,
-    video: false,
-  },
-  {
-    id: 424,
-    title: "Schindler's List",
-    overview: "The true story of how businessman Oskar Schindler saved over a thousand Jewish lives.",
-    poster_path: '/sF1U4EUQS8YHUYjNl3pMGNIQyr0.jpg',
-    backdrop_path: '/loRmRzQXZeqG78TqZuyvSlEQfZb.jpg',
-    release_date: '1993-12-15',
-    genre_ids: [18, 36, 10752],
-    vote_average: 8.6,
-    vote_count: 14000,
-    adult: false,
-    original_language: 'en',
-    original_title: "Schindler's List",
-    popularity: 88.7,
-    video: false,
-  },
-  {
-    id: 19404,
-    title: 'Dilwale Dulhania Le Jayenge',
-    overview: 'Raj is a rich, carefree, happy-go-lucky second generation NRI who comes to India for the first time.',
-    poster_path: '/2CAL2433ZeIihfX1Hb2139CX0pW.jpg',
-    backdrop_path: '/90ez6ArvpO8bvpyIngBuwXOqJm5.jpg',
-    release_date: '1995-10-20',
-    genre_ids: [35, 18, 10749],
-    vote_average: 8.7,
-    vote_count: 4000,
-    adult: false,
-    original_language: 'hi',
-    original_title: 'दिलवाले दुल्हनिया ले जायेंगे',
-    popularity: 82.5,
-    video: false,
-  },
-  {
-    id: 389,
-    title: '12 Angry Men',
-    overview: 'The defense and the prosecution have rested and the jury is filing into the jury room.',
-    poster_path: '/ow3wq89wM8qd5X7hWKxiRfsFf9C.jpg',
-    backdrop_path: '/qqHQsStV6exghCM7zbObuYBiYxw.jpg',
-    release_date: '1957-04-10',
-    genre_ids: [18],
-    vote_average: 8.5,
-    vote_count: 7000,
-    adult: false,
-    original_language: 'en',
-    original_title: '12 Angry Men',
-    popularity: 79.8,
-    video: false,
-  },
-  {
-    id: 155,
-    title: 'The Dark Knight',
-    overview: 'Batman raises the stakes in his war on crime with the help of Lt. Jim Gordon and District Attorney Harvey Dent.',
-    poster_path: '/qJ2tW6WMUDux911r6m7haRef0WH.jpg',
-    backdrop_path: '/hkBaDkMWbLaf8B1lsWsKX7Ew3Xq.jpg',
-    release_date: '2008-07-16',
-    genre_ids: [18, 28, 80, 53],
-    vote_average: 8.5,
-    vote_count: 30000,
-    adult: false,
-    original_language: 'en',
-    original_title: 'The Dark Knight',
-    popularity: 98.2,
-    video: false,
-  },
-  {
-    id: 496243,
-    title: 'Parasite',
-    overview: 'All unemployed, the Kim family takes peculiar interest in the wealthy Parks.',
-    poster_path: '/7IiTTgloJzvGI1TAYymCfbfl3vT.jpg',
-    backdrop_path: '/TU9NIjwzjoKPwQHoHshkFcQUCG.jpg',
-    release_date: '2019-05-30',
-    genre_ids: [35, 53, 18],
-    vote_average: 8.5,
-    vote_count: 16000,
-    adult: false,
-    original_language: 'ko',
-    original_title: '기생충',
-    popularity: 94.6,
-    video: false,
-  },
-  {
-    id: 13,
-    title: 'Forrest Gump',
-    overview: 'A man with a low IQ has accomplished great things and been present during significant historic events.',
-    poster_path: '/arw2vcBveWOVZr6pxd9XTd1TdQa.jpg',
-    backdrop_path: '/7c9UVPPiTPltoZVDg1p1oftTWL5.jpg',
-    release_date: '1994-07-06',
-    genre_ids: [35, 18, 10749],
-    vote_average: 8.5,
-    vote_count: 25000,
-    adult: false,
-    original_language: 'en',
-    original_title: 'Forrest Gump',
-    popularity: 92.1,
-    video: false,
-  },
-  {
-    id: 769,
-    title: 'GoodFellas',
-    overview: 'The story of Henry Hill and his life in the mob, covering his relationship with his wife Karen Hill.',
-    poster_path: '/aKuFiU82s5ISJpGZp7YkIr3kCUd.jpg',
-    backdrop_path: '/sw7mordbZxgITU877yTpZCud90M.jpg',
-    release_date: '1990-09-12',
-    genre_ids: [18, 80],
-    vote_average: 8.5,
-    vote_count: 11000,
-    adult: false,
-    original_language: 'en',
-    original_title: 'GoodFellas',
-    popularity: 87.3,
-    video: false,
-  },
-  {
-    id: 346,
-    title: 'Seven Samurai',
-    overview: 'A samurai answers a village request to defend it from bandits.',
-    poster_path: '/8OKmBV5BUFzmozIC3pPWKHy17kx.jpg',
-    backdrop_path: '/8OKmBV5BUFzmozIC3pPWKHy17kx.jpg',
-    release_date: '1954-04-26',
-    genre_ids: [28, 18],
-    vote_average: 8.5,
-    vote_count: 3000,
-    adult: false,
-    original_language: 'ja',
-    original_title: '七人の侍',
-    popularity: 76.9,
-    video: false,
-  },
-  {
-    id: 667,
-    title: 'Spirited Away',
-    overview: 'A young girl becomes trapped in a strange new world of spirits.',
-    poster_path: '/39wmItIWsg5sZMyRUHLkWBcuVCM.jpg',
-    backdrop_path: '/Ab8mkHmkYADjU7wQiOkia9BzGvS.jpg',
-    release_date: '2001-07-20',
-    genre_ids: [16, 10751, 14],
-    vote_average: 8.5,
-    vote_count: 14000,
-    adult: false,
-    original_language: 'ja',
-    original_title: '千と千尋の神隠し',
-    popularity: 91.4,
-    video: false,
-  },
-  {
-    id: 680,
-    title: 'Pulp Fiction',
-    overview: 'A burger-loving hit man, a philosophical partner, and a robbery-prone couple intertwine.',
-    poster_path: '/d5iIlFn5s0ImszYzBPb8JPIfbXD.jpg',
-    backdrop_path: '/4cDFJr4HnXN5AdPw4AKrmLlMWdO.jpg',
-    release_date: '1994-09-10',
-    genre_ids: [53, 80],
-    vote_average: 8.5,
-    vote_count: 26000,
-    adult: false,
-    original_language: 'en',
-    original_title: 'Pulp Fiction',
-    popularity: 96.8,
-    video: false,
-  },
-  {
-    id: 122,
-    title: 'The Lord of the Rings: The Return of the King',
-    overview: "Gandalf and Aragorn lead the World of Men against Sauron's army.",
-    poster_path: '/rCzpDGLbOoPwLjy3OAm5NUPOTrC.jpg',
-    backdrop_path: '/2u7zbn8EudG6kLlBzUYqP8RyFU4.jpg',
-    release_date: '2003-12-01',
-    genre_ids: [12, 14, 28],
-    vote_average: 8.5,
-    vote_count: 22000,
-    adult: false,
-    original_language: 'en',
-    original_title: 'The Lord of the Rings: The Return of the King',
-    popularity: 95.7,
-    video: false,
-  },
-  {
-    id: 497,
-    title: 'The Green Mile',
-    overview: 'A tale set on death row in a Southern prison, where gentle giant John Coffey possesses mysterious powers.',
-    poster_path: '/velWPhVMQeQKcxggNEU8YmIo52R.jpg',
-    backdrop_path: '/l6hQWH9eDksNJNiXWYRkWqikOdu.jpg',
-    release_date: '1999-12-10',
-    genre_ids: [14, 18, 80],
-    vote_average: 8.5,
-    vote_count: 15000,
-    adult: false,
-    original_language: 'en',
-    original_title: 'The Green Mile',
-    popularity: 89.2,
-    video: false,
-  },
-];
+const MOCK_MOVIES_BY_LANGUAGE: Record<string, TMDBMovie[]> = {
+  en: [
+    { id:278,title:'The Shawshank Redemption',overview:'Two imprisoned men bond over years, finding solace and redemption.',poster_path:'/q6y0Go1tsGEsmtFryDOJo3dEmqu.jpg',backdrop_path:'/kXfqcdQKsToO0OUXHcrrNCHDBzO.jpg',release_date:'1994-09-23',genre_ids:[18,80],vote_average:9.3,vote_count:2400000,adult:false,original_language:'en',original_title:'The Shawshank Redemption',popularity:95.4,video:false},
+    { id:238,title:'The Godfather',overview:'The aging patriarch of an organized crime dynasty transfers control.',poster_path:'/3bhkrj58Vtu7enYsRolD1fZdja1.jpg',backdrop_path:'/tmU7GeKVybMWFButWEGl2M4GeiP.jpg',release_date:'1972-03-14',genre_ids:[18,80],vote_average:9.2,vote_count:1700000,adult:false,original_language:'en',original_title:'The Godfather',popularity:92.1,video:false},
+    { id:155,title:'The Dark Knight',overview:'When a menace known as The Joker emerges, he wreaks havoc on Gotham.',poster_path:'/qJ2tW6WMUDux911r6m7haRef0WH.jpg',backdrop_path:'/hkBaDkMWbLaf8B1lsWsKX7Ew3Xq.jpg',release_date:'2008-07-18',genre_ids:[18,28,80,53],vote_average:9.0,vote_count:2500000,adult:false,original_language:'en',original_title:'The Dark Knight',popularity:98.2,video:false},
+    { id:680,title:'Pulp Fiction',overview:'The lives of two mob hitmen, a boxer, and a pair of diner bandits intertwine.',poster_path:'/d5iIlFn5s0ImszYzBPb8JPIfbXD.jpg',backdrop_path:'/4cDFJr4HnXN5AdPw4AKrmLlMWdO.jpg',release_date:'1994-10-14',genre_ids:[18,80,53],vote_average:8.9,vote_count:1900000,adult:false,original_language:'en',original_title:'Pulp Fiction',popularity:96.8,video:false}
+  ],
+  hi: [
+    { id:19404,title:'Dilwale Dulhania Le Jayenge',overview:'Raj is a rich, carefree NRI who falls in love on a Europe trip.',poster_path:'/2CAL2433ZeIihfX1Hb2139CX0pW.jpg',backdrop_path:'/90ez6ArvpO8bvpyIngBuwXOqJm5.jpg',release_date:'1995-10-20',genre_ids:[35,18,10749],vote_average:8.7,vote_count:4000,adult:false,original_language:'hi',original_title:'दिलवाले दुल्हनिया ले जायेंगे',popularity:82.5,video:false},
+    { id:3782,title:'3 Idiots',overview:'Two friends revisit their college days searching for their missing companion.',poster_path:'/66A9MqXOyVFCssoloscwiegTPQ.jpg',backdrop_path:'/lC5OpQd8PNPyHx3tJKvY5A2APKG.jpg',release_date:'2009-12-25',genre_ids:[18,35],vote_average:8.4,vote_count:5000,adult:false,original_language:'hi',original_title:'3 Idiots',popularity:88.9,video:false},
+    { id:364686,title:'Dangal',overview:'A former wrestler trains his daughters for the Commonwealth Games.',poster_path:'/lY5HgVqUErWTzFeGT17rwyQqOrD.jpg',backdrop_path:'/fRKOZkTO0WWzlsH9VhYcvJ21pk.jpg',release_date:'2016-12-23',genre_ids:[18,28],vote_average:8.3,vote_count:3200,adult:false,original_language:'hi',original_title:'दंगल',popularity:79.4,video:false}
+  ],
+  ja: [
+    { id:12477,title:'Grave of the Fireflies',overview:'Two children struggle to survive in WWII Japan.',poster_path:'/k9tv1rXZbOhH7eiCk378x61kNQ1.jpg',backdrop_path:'/vkZSd0Lp8iCVBGpFH9L7LzLusjS.jpg',release_date:'1988-04-16',genre_ids:[16,18,10752],vote_average:8.5,vote_count:4800,adult:false,original_language:'ja',original_title:'火垂るの墓',popularity:83.7,video:false},
+    { id:128,title:'Princess Mononoke',overview:'A struggle between forest gods and humans.',poster_path:'/jHWmNr7m544fJ8eItsfNk8fs2Ed.jpg',backdrop_path:'/6pTqSq0zYIWCsucJys8q5L92kUY.jpg',release_date:'1997-07-12',genre_ids:[12,16,14],vote_average:8.4,vote_count:6200,adult:false,original_language:'ja',original_title:'もののけ姫',popularity:87.6,video:false}
+  ],
+  ko: [
+    { id:496243,title:'Parasite',overview:'A poor family schemes to become employed by a wealthy family.',poster_path:'/7IiTTgloJzvGI1TAYymCfbfl3vT.jpg',backdrop_path:'/TU9NIjwzjoKPwQHoHshkFcQUCG.jpg',release_date:'2019-05-30',genre_ids:[35,53,18],vote_average:8.5,vote_count:16000,adult:false,original_language:'ko',original_title:'기생충',popularity:94.6,video:false}
+  ]
+};
 
 class MovieService {
-  private useRealAPI: boolean = false;
-
-  constructor() {
-    this.useRealAPI = !!TMDB_BEARER_TOKEN && TMDB_BEARER_TOKEN.length > 10;
-    if (!this.useRealAPI) {
-      console.log('Using mock movie data - Add TMDB Bearer token to use real data');
-    }
-  }
+  private useRealAPI = !!TMDB_API_KEY && TMDB_API_KEY.length > 10;
 
   private async makeRequest<T>(endpoint: string, params: Record<string, any> = {}): Promise<T> {
-    if (!this.useRealAPI) {
-      return this.getMockData(endpoint, params) as T;
-    }
-
+    if (!this.useRealAPI) return this.getMockData(endpoint, params) as T;
     try {
       const response = await axios.get(`${TMDB_BASE_URL}${endpoint}`, {
-        headers: {
-          'Authorization': `Bearer ${TMDB_BEARER_TOKEN}`,
-          'accept': 'application/json',
-        },
-        params,
-        timeout: 10000,
+        params: { api_key: TMDB_API_KEY, ...params },
+        timeout: 10000
       });
       return response.data;
-    } catch (error: any) {
-      console.error(`TMDB API Error [${endpoint}]:`, error.response?.status, error.message);
+    } catch {
       return this.getMockData(endpoint, params) as T;
     }
   }
 
   private getMockData(endpoint: string, params: Record<string, any>): TMDBResponse {
-    let results = [...MOCK_MOVIES];
-
+    const langs = params.with_original_language?.split(',') || ['en'];
+    let all: TMDBMovie[] = [];
+    langs.forEach(l => { if (MOCK_MOVIES_BY_LANGUAGE[l]) all.push(...MOCK_MOVIES_BY_LANGUAGE[l]); });
+    if (!all.length) all = MOCK_MOVIES_BY_LANGUAGE['en'];
+    let results = all;
     if (endpoint.includes('/search/movie') && params.query) {
-      const query = params.query.toLowerCase();
-      results = MOCK_MOVIES.filter(movie => 
-        movie.title.toLowerCase().includes(query) ||
-        movie.overview.toLowerCase().includes(query)
-      );
+      const q = params.query.toLowerCase();
+      results = all.filter(m => m.title.toLowerCase().includes(q) || m.overview.toLowerCase().includes(q));
     }
-
     if (endpoint.includes('/discover/movie') && params.with_genres) {
-      const genreId = Number(params.with_genres);
-      results = MOCK_MOVIES.filter(movie => 
-        movie.genre_ids.includes(genreId)
-      );
+      const gid = Number(params.with_genres);
+      results = results.filter(m => m.genre_ids.includes(gid));
     }
-
-    const page = params.page || 1;
-    const perPage = 20;
-    const start = (page - 1) * perPage;
-    const end = start + perPage;
-
-    return {
-      page,
-      results: results.slice(start, end),
-      total_pages: Math.ceil(results.length / perPage),
-      total_results: results.length,
-    };
+    return { page: params.page||1, results: results.slice(0,20), total_pages:1, total_results:results.length };
   }
 
-  private transformTMDBMovie(tmdbMovie: TMDBMovie): Movie {
+  private transform(m: TMDBMovie): Movie {
     return {
-      id: tmdbMovie.id,
-      title: tmdbMovie.title,
-      year: new Date(tmdbMovie.release_date || '2024-01-01').getFullYear(),
-      genre: this.mapGenreIds(tmdbMovie.genre_ids || []),
-      language: tmdbMovie.original_language || 'en',
-      rating: tmdbMovie.vote_average || 0,
-      plot: tmdbMovie.overview || '',
+      id: m.id,
+      title: m.title,
+      year: new Date(m.release_date).getFullYear(),
+      genre: this.mapGenres(m.genre_ids),
+      language: m.original_language,
+      rating: Number(m.vote_average.toFixed(1)),
+      plot: m.overview,
       director: '',
       cast: [],
       mood_tags: [],
-      streaming_platforms: [],
+      streaming_platforms: ['TMDB'],
       trailer_link: '',
-      poster: tmdbMovie.poster_path ? `${TMDB_IMAGE_BASE_URL}${tmdbMovie.poster_path}` : '',
-      poster_path: tmdbMovie.poster_path,
-      backdrop_path: tmdbMovie.backdrop_path,
-      overview: tmdbMovie.overview,
-      release_date: tmdbMovie.release_date,
-      vote_average: tmdbMovie.vote_average,
-      vote_count: tmdbMovie.vote_count,
-      adult: tmdbMovie.adult || false,
-      age_rating: this.getAgeRating(tmdbMovie.adult || false, tmdbMovie.genre_ids || []),
+      poster: m.poster_path ? `${TMDB_IMAGE_BASE_URL}${m.poster_path}` : '',
+      poster_path: m.poster_path,
+      backdrop_path: m.backdrop_path,
+      overview: m.overview,
+      release_date: m.release_date,
+      vote_average: m.vote_average,
+      vote_count: m.vote_count,
+      adult: m.adult,
+      age_rating: this.getAgeRating(m.adult, m.genre_ids)
     };
   }
 
-  private mapGenreIds(genreIds: number[]): string[] {
-    const genreMap: Record<number, string> = {
-      28: 'Action',
-      12: 'Adventure',
-      16: 'Animation',
-      35: 'Comedy',
-      80: 'Crime',
-      99: 'Documentary',
-      18: 'Drama',
-      10751: 'Family',
-      14: 'Fantasy',
-      36: 'History',
-      27: 'Horror',
-      10402: 'Music',
-      9648: 'Mystery',
-      10749: 'Romance',
-      878: 'Science Fiction',
-      10770: 'TV Movie',
-      53: 'Thriller',
-      10752: 'War',
-      37: 'Western',
-    };
-    return genreIds.map(id => genreMap[id] || 'Unknown');
+  private mapGenres(ids: number[]): string[] {
+    const map: Record<number,string> = {28:'Action',12:'Adventure',16:'Animation',35:'Comedy',80:'Crime',99:'Documentary',18:'Drama',10751:'Family',14:'Fantasy',36:'History',27:'Horror',10402:'Music',9648:'Mystery',10749:'Romance',878:'Sci-Fi',10770:'TV Movie',53:'Thriller',10752:'War',37:'Western'};
+    return ids.map(i => map[i]||'Unknown');
   }
 
-  private getAgeRating(adult: boolean, genreIds: number[]): string {
-    if (adult) return '18+';
-    const horrorGenre = genreIds.includes(27);
-    const thrillerGenre = genreIds.includes(53);
-    if (horrorGenre || thrillerGenre) return 'PG-13';
+  private getAgeRating(adult:boolean, ids:number[]):string {
+    if(adult) return '18+';
+    if(ids.includes(27)||ids.includes(53)) return 'PG-13';
     return 'PG';
   }
 
-  async getPopularMovies(page: number = 1): Promise<Movie[]> {
-    const response = await this.makeRequest<TMDBResponse>('/movie/popular', { page });
-    return response.results.map(movie => this.transformTMDBMovie(movie));
+  async getPopularMovies(page=1, languages:string[]=['en']):Promise<Movie[]> {
+    const res = await this.makeRequest<TMDBResponse>('/movie/popular',{page,with_original_language:languages.join(',')});
+    return res.results.map(this.transform.bind(this));
   }
-
-  async searchMovies(query: string, page: number = 1): Promise<Movie[]> {
-    const response = await this.makeRequest<TMDBResponse>('/search/movie', { query, page });
-    return response.results.map(movie => this.transformTMDBMovie(movie));
+  async searchMovies(q:string,page=1,langs:string[]=['en']):Promise<Movie[]> {
+    const res = await this.makeRequest<TMDBResponse>('/search/movie',{query:q,page,with_original_language:langs.join(',')});
+    return res.results.map(this.transform.bind(this));
   }
-
-  async getMoviesByGenre(genreId: number, page: number = 1): Promise<Movie[]> {
-    const response = await this.makeRequest<TMDBResponse>('/discover/movie', {
-      with_genres: genreId,
-      page,
-    });
-    return response.results.map(movie => this.transformTMDBMovie(movie));
+  async getMoviesByGenre(gid:number,page=1,langs:string[]=['en']):Promise<Movie[]> {
+    const res = await this.makeRequest<TMDBResponse>('/discover/movie',{with_genres:gid,page,with_original_language:langs.join(','),sort_by:'popularity.desc'});
+    return res.results.map(this.transform.bind(this));
   }
-
-  async getMovieDetails(movieId: number): Promise<Movie> {
-    const mockMovie = MOCK_MOVIES.find(m => m.id === movieId);
-    if (mockMovie) {
-      return this.transformTMDBMovie(mockMovie);
+  async getMovieDetails(id:number):Promise<Movie> {
+    for(const langMovies of Object.values(MOCK_MOVIES_BY_LANGUAGE)){
+      const found=langMovies.find(m=>m.id===id);
+      if(found) return this.transform(found);
     }
-    
-    if (this.useRealAPI) {
-      const movie = await this.makeRequest<TMDBMovie>(`/movie/${movieId}`);
-      return this.transformTMDBMovie(movie);
+    if(this.useRealAPI){
+      const movie = await this.makeRequest<TMDBMovie>(`/movie/${id}`);
+      return this.transform(movie);
     }
-
-    return this.transformTMDBMovie(MOCK_MOVIES[0]);
+    return this.transform(MOCK_MOVIES_BY_LANGUAGE['en'][0]);
   }
-
-  filterMoviesByAge(movies: Movie[]): Movie[] {
-    return movies;
-  }
-
-  filterExcludingFavorites(movies: Movie[], favoriteIds: number[]): Movie[] {
-    return movies.filter(movie => !favoriteIds.includes(movie.id));
-  }
+  filterMoviesByAge(ms:Movie[]):Movie[]{return ms;}
+  filterExcludingFavorites(ms:Movie[],fids:number[]):Movie[]{return ms.filter(m=>!fids.includes(m.id));}
 }
 
 export const movieService = new MovieService();

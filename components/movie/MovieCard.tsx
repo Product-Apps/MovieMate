@@ -1,4 +1,4 @@
-// components/movie/MovieCard.tsx
+// components/movie/MovieCard.tsx (Show language flag)
 import React from 'react';
 import {
   View,
@@ -15,6 +15,21 @@ import { useRouter } from 'expo-router';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - 60) / 2;
+
+const LANGUAGE_FLAGS: Record<string, string> = {
+  'en': '🇺🇸',
+  'hi': '🇮🇳',
+  'ja': '🇯🇵',
+  'ko': '🇰🇷',
+  'fr': '🇫🇷',
+  'es': '🇪🇸',
+  'de': '🇩🇪',
+  'it': '🇮🇹',
+  'pt': '🇵🇹',
+  'ru': '🇷🇺',
+  'zh': '🇨🇳',
+  'ar': '🇸🇦',
+};
 
 interface MovieCardProps {
   movie: Movie;
@@ -67,13 +82,25 @@ export default function MovieCard({ movie, showFavoriteButton = true }: MovieCar
         <View style={styles.ageRatingBadge}>
           <Text style={styles.ageRatingText}>{movie.age_rating || 'PG'}</Text>
         </View>
+
+        {/* Language Flag */}
+        <View style={styles.languageBadge}>
+          <Text style={styles.languageFlag}>
+            {LANGUAGE_FLAGS[movie.language] || '🌐'}
+          </Text>
+        </View>
       </View>
 
       <View style={styles.movieInfo}>
         <Text style={styles.title} numberOfLines={2}>
           {movie.title}
         </Text>
-        <Text style={styles.year}>{movie.year}</Text>
+        <View style={styles.yearLanguageContainer}>
+          <Text style={styles.year}>{movie.year}</Text>
+          <Text style={styles.language}>
+            {movie.language.toUpperCase()}
+          </Text>
+        </View>
         
         <View style={styles.genreContainer}>
           {movie.genre.slice(0, 2).map((genre, index) => (
@@ -148,6 +175,20 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: 'bold',
   },
+  languageBadge: {
+    position: 'absolute',
+    bottom: 8,
+    left: 8,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    borderRadius: 12,
+    width: 24,
+    height: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  languageFlag: {
+    fontSize: 14,
+  },
   movieInfo: {
     padding: 12,
   },
@@ -158,10 +199,24 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     lineHeight: 18,
   },
+  yearLanguageContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
   year: {
     fontSize: 12,
     color: '#666',
-    marginBottom: 8,
+  },
+  language: {
+    fontSize: 10,
+    color: '#007AFF',
+    fontWeight: '600',
+    backgroundColor: '#e3f2fd',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
   },
   genreContainer: {
     flexDirection: 'row',

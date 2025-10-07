@@ -1,13 +1,13 @@
-// app/(tabs)/index.tsx
+// app/(tabs)/index.tsx (Fixed - No nested ScrollView)
 import React, { useEffect } from 'react';
-import { StyleSheet, ScrollView, Pressable, Alert, View, Text } from 'react-native';
+import { StyleSheet, FlatList, Pressable, Alert, View, Text, RefreshControl } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useMoodStore } from '@/store/useMoodStore';
 import { useMovieStore } from '@/store/useMovieStore';
 import { useFavoriteStore } from '@/store/useFavoriteStore';
 import { useSettingsStore } from '@/store/useSettingsStore';
-import MovieList from '@/components/movie/MovieList';
+import MovieCard from '@/components/movie/MovieCard';
 import { movieService } from '@/services/movieService';
 
 export default function HomeScreen() {
@@ -16,6 +16,7 @@ export default function HomeScreen() {
   const { recommendations, setRecommendations } = useMovieStore();
   const { favorites, getFavoriteCount } = useFavoriteStore();
   const { profile } = useSettingsStore();
+  const [refreshing, setRefreshing] = React.useState(false);
 
   useEffect(() => {
     loadRecommendations();
@@ -40,6 +41,12 @@ export default function HomeScreen() {
     } catch (error) {
       console.error('Failed to load recommendations:', error);
     }
+  };
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadRecommendations();
+    setRefreshing(false);
   };
 
   const handleStartPuzzles = () => {
@@ -77,8 +84,8 @@ export default function HomeScreen() {
     return 'Good Evening';
   };
 
-  return (
-    <ScrollView style={styles.container}>
+  const renderHeader = () => (
+    <>
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.greeting}>
@@ -140,7 +147,7 @@ export default function HomeScreen() {
         </Pressable>
       </View>
 
-      {/* Your Favorites */}
+      {/* Your Favorites Section */}
       {favorites.length > 0 && (
         <View style={styles.moviesSection}>
           <View style={styles.sectionHeader}>
@@ -149,15 +156,14 @@ export default function HomeScreen() {
               <Text style={styles.seeAllText}>See All</Text>
             </Pressable>
           </View>
-          <MovieList 
-            movies={favorites.slice(0, 4)} 
-            showFavoriteButton={true}
-            emptyMessage="No favorites yet"
-          />
         </View>
       )}
+    </>
+  );
 
-      {/* Recommended for You */}
+  const renderFooter = () => (
+    <>
+      {/* Recommended Section */}
       {recommendations.length > 0 && (
         <View style={styles.moviesSection}>
           <View style={styles.sectionHeader}>
@@ -166,21 +172,42 @@ export default function HomeScreen() {
               <Text style={styles.seeAllText}>See All</Text>
             </Pressable>
           </View>
-          <MovieList 
-            movies={recommendations.slice(0, 4).map(r => r.movie)} 
-            showFavoriteButton={true}
-            emptyMessage="Complete puzzles to get recommendations"
-          />
         </View>
       )}
-    </ScrollView>
+    </>
+  );
+
+  const allMovies = [
+    ...favorites.slice(0, 4),
+    ...recommendations.slice(0, 6).map(r => r.movie),
+  ];
+
+  return (
+    <FlatList
+      data={allMovies}
+      renderItem={({ item }) => <MovieCard movie={item} showFavoriteButton={true} />}
+      keyExtractor={(item) => item.id.toString()}
+      numColumns={2}
+      columnWrapperStyle={styles.row}
+      ListHeaderComponent={renderHeader}
+      ListFooterComponent={renderFooter}
+      contentContainerStyle={styles.container}
+      showsVerticalScrollIndicator={false}
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+      }
+    />
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
     backgroundColor: '#fff',
+    paddingBottom: 20,
+  },
+  row: {
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
   },
   header: {
     padding: 20,
@@ -283,7 +310,7 @@ const styles = StyleSheet.create({
   },
   moviesSection: {
     paddingHorizontal: 20,
-    marginBottom: 30,
+    marginBottom: 16,
   },
   sectionHeader: {
     flexDirection: 'row',

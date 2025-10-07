@@ -1,17 +1,15 @@
-// app/(tabs)/movies.tsx
+// app/(tabs)/movies.tsx (Updated to use language filtering)
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, ScrollView, View, Text, Pressable, ActivityIndicator, TextInput } from 'react-native';
+import { StyleSheet, FlatList, View, Text, Pressable, ActivityIndicator, TextInput } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useMovieStore } from '@/store/useMovieStore';
 import { useMoodStore } from '@/store/useMoodStore';
 import { useFavoriteStore } from '@/store/useFavoriteStore';
 import { useSettingsStore } from '@/store/useSettingsStore';
-import { Movie, MovieRecommendation } from '@/types/movie';
-import { moodAnalyzer } from '@/services/moodAnalyzer';
-import { recommendationEngine } from '@/services/movieRecommendationEngine';
+import { Movie } from '@/types/movie';
 import { movieService } from '@/services/movieService';
-import MovieList from '@/components/movie/MovieList';
+import MovieCard from '@/components/movie/MovieCard';
 import GenreSelector from '@/components/movie/GenreSelector';
 import LanguageSelector from '@/components/movie/LanguageSelector';
 
@@ -24,7 +22,7 @@ export default function MoviesScreen() {
     selectedLanguages,
     selectedGenres,
   } = useMovieStore();
-  const { currentMoodAnalysis, puzzleResponses, setMoodAnalysis } = useMoodStore();
+  const { currentMoodAnalysis } = useMoodStore();
   const { favorites } = useFavoriteStore();
   const { profile } = useSettingsStore();
   
@@ -44,7 +42,7 @@ export default function MoviesScreen() {
     } else {
       setSearchResults([]);
     }
-  }, [searchQuery]);
+  }, [searchQuery, selectedLanguages]);
 
   const loadMovies = async () => {
     setLoading(true);
@@ -52,38 +50,39 @@ export default function MoviesScreen() {
     setError(null);
 
     try {
-      let movieRecommendations: MovieRecommendation[] = [];
+      console.log('Loading movies for languages:', selectedLanguages);
+      
+      let movies: Movie[] = [];
 
-      if (puzzleResponses.length > 0) {
-        let moodAnalysis = currentMoodAnalysis;
-        if (!moodAnalysis) {
-          moodAnalysis = moodAnalyzer.analyzeMood(puzzleResponses);
-          setMoodAnalysis(moodAnalysis);
+      if (selectedGenres.length > 0) {
+        // Get movies by genre and language
+        for (const genreId of selectedGenres) {
+          const genreMovies = await movieService.getMoviesByGenre(genreId, 1, selectedLanguages);
+          movies = [...movies, ...genreMovies];
         }
-
-        movieRecommendations = await recommendationEngine.generateRecommendations(
-          moodAnalysis,
-          puzzleResponses,
-          selectedLanguages.length > 0 ? selectedLanguages : ['en'],
-          20
-        );
       } else {
-        // Load popular movies if no mood analysis
-        const popular = await movieService.getPopularMovies();
-        const filtered = movieService.filterMoviesByAge(popular);
-        movieRecommendations = filtered.map(movie => ({
-          movie,
-          matchScore: Math.floor(Math.random() * 30) + 70,
-          reason: 'Popular choice'
-        }));
+        // Get popular movies for selected languages
+        movies = await movieService.getPopularMovies(1, selectedLanguages);
       }
 
-      // Exclude favorites from recommendations
+      const filtered = movieService.filterMoviesByAge(movies);
+      const movieRecommendations = filtered.map(movie => ({
+        movie,
+        matchScore: Math.floor(Math.random() * 30) + 70,
+        reason: `${movie.language.toUpperCase()} ${currentMoodAnalysis ? currentMoodAnalysis.primaryMood : 'Popular'} pick`
+      }));
+
+      // Remove duplicates based on movie ID
+      const uniqueRecommendations = movieRecommendations.filter((rec, index, self) =>
+        index === self.findIndex(r => r.movie.id === rec.movie.id)
+      );
+
       const favoriteIds = favorites.map(f => f.id);
-      const filteredRecommendations = movieRecommendations.filter(
+      const filteredRecommendations = uniqueRecommendations.filter(
         rec => !favoriteIds.includes(rec.movie.id)
       );
 
+      console.log(`Found ${filteredRecommendations.length} movies for languages:`, selectedLanguages);
       setRecommendations(filteredRecommendations);
     } catch (err) {
       console.error('Error loading movies:', err);
@@ -95,83 +94,74 @@ export default function MoviesScreen() {
   };
 
   const searchMovies = async () => {
+    if (searchQuery.length <= 2) return;
+    
     try {
-      const results = await movieService.searchMovies(searchQuery);
+      console.log('Searching movies:', searchQuery, 'in languages:', selectedLanguages);
+      const results = await movieService.searchMovies(searchQuery, 1, selectedLanguages);
       const filtered = movieService.filterMoviesByAge(results);
       const favoriteIds = favorites.map(f => f.id);
       const excludingFavorites = movieService.filterExcludingFavorites(filtered, favoriteIds);
+      console.log(`Search found ${excludingFavorites.length} results`);
       setSearchResults(excludingFavorites);
     } catch (error) {
       console.error('Search failed:', error);
     }
   };
 
-  const handleRetry = () => {
-    setError(null);
-    loadMovies();
+  const getSelectedLanguageNames = () => {
+    const LANGUAGES = [
+      { code: 'en', name: 'English' },
+      { code: 'hi', name: 'Hindi' },
+      { code: 'ja', name: 'Japanese' },
+      { code: 'ko', name: 'Korean' },
+      { code: 'fr', name: 'French' },
+      { code: 'es', name: 'Spanish' },
+      { code: 'de', name: 'German' },
+      { code: 'it', name: 'Italian' },
+    ];
+    
+    return LANGUAGES
+      .filter(lang => selectedLanguages.includes(lang.code))
+      .map(lang => lang.name)
+      .join(', ');
   };
 
   const moviesToDisplay = searchQuery.length > 2 ? searchResults : recommendations.map(r => r.movie);
 
-  if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
-        <Text style={styles.loadingText}>🎬 Finding perfect movies...</Text>
-        <Text style={styles.loadingSubtext}>Analyzing your preferences</Text>
+  const renderHeader = () => (
+    <>
+      {/* Search Bar */}
+      <View style={styles.searchContainer}>
+        <Ionicons name="search" size={20} color="#666" style={styles.searchIcon} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder={`Search movies in ${getSelectedLanguageNames()}...`}
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          placeholderTextColor="#666"
+        />
+        {searchQuery.length > 0 && (
+          <Pressable onPress={() => setSearchQuery('')}>
+            <Ionicons name="close-circle" size={20} color="#666" />
+          </Pressable>
+        )}
       </View>
-    );
-  }
 
-  if (error) {
-    return (
-      <View style={styles.errorContainer}>
-        <Text style={styles.errorTitle}>😕 Oops!</Text>
-        <Text style={styles.errorText}>{error}</Text>
-        <Pressable style={styles.retryButton} onPress={handleRetry}>
-          <Text style={styles.retryButtonText}>Try Again</Text>
-        </Pressable>
-        <Pressable 
-          style={styles.secondaryButton} 
-          onPress={() => router.push('/puzzles')}
-        >
-          <Text style={styles.secondaryButtonText}>Retake Puzzles</Text>
-        </Pressable>
-      </View>
-    );
-  }
+      {/* Filter Button */}
+      <Pressable 
+        style={styles.filterButton} 
+        onPress={() => setShowFilters(!showFilters)}
+      >
+        <Ionicons name="options" size={20} color="#007AFF" />
+        <Text style={styles.filterButtonText}>Filters & Languages</Text>
+      </Pressable>
 
-  return (
-    <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.title}>🎬 Discover Movies</Text>
-        
-        {/* Search Bar */}
-        <View style={styles.searchContainer}>
-          <Ionicons name="search" size={20} color="#666" style={styles.searchIcon} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search movies..."
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            placeholderTextColor="#666"
-          />
-          {searchQuery.length > 0 && (
-            <Pressable onPress={() => setSearchQuery('')}>
-              <Ionicons name="close-circle" size={20} color="#666" />
-            </Pressable>
-          )}
-        </View>
-
-        {/* Filter Button */}
-        <Pressable 
-          style={styles.filterButton} 
-          onPress={() => setShowFilters(!showFilters)}
-        >
-          <Ionicons name="options" size={20} color="#007AFF" />
-          <Text style={styles.filterButtonText}>Filters</Text>
-        </Pressable>
+      {/* Language Info */}
+      <View style={styles.languageInfo}>
+        <Text style={styles.languageInfoText}>
+          🌍 Showing: {getSelectedLanguageNames()} movies ({moviesToDisplay.length} found)
+        </Text>
       </View>
 
       {/* Filters */}
@@ -202,39 +192,11 @@ export default function MoviesScreen() {
           </Text>
         </View>
       )}
+    </>
+  );
 
-      {/* Movies List */}
-      <ScrollView style={styles.moviesContainer} showsVerticalScrollIndicator={false}>
-        {moviesToDisplay.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyTitle}>
-              {searchQuery.length > 2 ? '🔍 No Search Results' : '🧩 No Recommendations Yet'}
-            </Text>
-            <Text style={styles.emptyText}>
-              {searchQuery.length > 2 
-                ? `No movies found for "${searchQuery}". Try a different search term.`
-                : 'Complete the mood puzzles to get personalized movie recommendations!'
-              }
-            </Text>
-            {searchQuery.length === 0 && (
-              <Pressable 
-                style={styles.startButton} 
-                onPress={() => router.push('/puzzles')}
-              >
-                <Text style={styles.startButtonText}>Start Puzzles</Text>
-              </Pressable>
-            )}
-          </View>
-        ) : (
-          <MovieList 
-            movies={moviesToDisplay} 
-            showFavoriteButton={true}
-            emptyMessage={searchQuery.length > 2 ? "No movies found" : "No recommendations available"}
-          />
-        )}
-      </ScrollView>
-
-      {/* Retake Puzzles Button */}
+  const renderFooter = () => (
+    <>
       {recommendations.length > 0 && searchQuery.length === 0 && (
         <View style={styles.actions}>
           <Pressable 
@@ -246,6 +208,71 @@ export default function MoviesScreen() {
           </Pressable>
         </View>
       )}
+    </>
+  );
+
+  const renderEmpty = () => (
+    <View style={styles.emptyContainer}>
+      <Text style={styles.emptyTitle}>
+        {searchQuery.length > 2 ? '🔍 No Search Results' : '🎬 No Movies Found'}
+      </Text>
+      <Text style={styles.emptyText}>
+        {searchQuery.length > 2 
+          ? `No movies found for "${searchQuery}" in ${getSelectedLanguageNames()}.`
+          : `No movies available for ${getSelectedLanguageNames()}. Try selecting different languages.`
+        }
+      </Text>
+      {searchQuery.length === 0 && (
+        <Pressable 
+          style={styles.startButton} 
+          onPress={() => setShowFilters(true)}
+        >
+          <Text style={styles.startButtonText}>Change Languages</Text>
+        </Pressable>
+      )}
+    </View>
+  );
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#007AFF" />
+        <Text style={styles.loadingText}>🎬 Loading {getSelectedLanguageNames()} movies...</Text>
+        <Text style={styles.loadingSubtext}>Finding the best content for you</Text>
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={styles.errorContainer}>
+        <Text style={styles.errorTitle}>😕 Oops!</Text>
+        <Text style={styles.errorText}>{error}</Text>
+        <Pressable style={styles.retryButton} onPress={loadMovies}>
+          <Text style={styles.retryButtonText}>Try Again</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.title}>🎬 Discover Movies</Text>
+      </View>
+
+      <FlatList
+        data={moviesToDisplay}
+        renderItem={({ item }) => <MovieCard movie={item} showFavoriteButton={true} />}
+        keyExtractor={(item) => item.id.toString()}
+        numColumns={2}
+        columnWrapperStyle={styles.row}
+        ListHeaderComponent={renderHeader}
+        ListFooterComponent={renderFooter}
+        ListEmptyComponent={renderEmpty}
+        contentContainerStyle={styles.listContainer}
+        showsVerticalScrollIndicator={false}
+      />
     </View>
   );
 }
@@ -265,8 +292,14 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 24,
     fontWeight: 'bold',
-    marginBottom: 16,
     textAlign: 'center',
+  },
+  listContainer: {
+    paddingBottom: 20,
+  },
+  row: {
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
   },
   searchContainer: {
     flexDirection: 'row',
@@ -275,6 +308,8 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 8,
+    marginHorizontal: 20,
+    marginTop: 16,
     marginBottom: 12,
   },
   searchIcon: {
@@ -292,23 +327,41 @@ const styles = StyleSheet.create({
     backgroundColor: '#f0f0f0',
     padding: 12,
     borderRadius: 8,
+    marginHorizontal: 20,
+    marginBottom: 12,
   },
   filterButtonText: {
     color: '#007AFF',
     fontWeight: '500',
     marginLeft: 8,
   },
+  languageInfo: {
+    backgroundColor: '#e3f2fd',
+    padding: 12,
+    marginHorizontal: 20,
+    marginBottom: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#90caf9',
+  },
+  languageInfoText: {
+    fontSize: 13,
+    color: '#1565c0',
+    textAlign: 'center',
+    fontWeight: '500',
+  },
   filtersContainer: {
     backgroundColor: '#f8f9fa',
     padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
+    marginHorizontal: 20,
+    marginBottom: 12,
+    borderRadius: 8,
   },
   moodIndicator: {
     backgroundColor: 'rgba(0, 122, 255, 0.1)',
     padding: 12,
     marginHorizontal: 20,
-    marginTop: 16,
+    marginBottom: 12,
     borderRadius: 8,
     borderLeftWidth: 4,
     borderLeftColor: '#007AFF',
@@ -327,7 +380,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff3cd',
     padding: 12,
     marginHorizontal: 20,
-    marginTop: 16,
+    marginBottom: 12,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: '#ffeaa7',
@@ -336,9 +389,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#856404',
     textAlign: 'center',
-  },
-  moviesContainer: {
-    flex: 1,
   },
   loadingContainer: {
     flex: 1,
@@ -351,6 +401,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginTop: 20,
     marginBottom: 10,
+    textAlign: 'center',
   },
   loadingSubtext: {
     fontSize: 16,
@@ -379,31 +430,15 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     minWidth: 150,
     alignItems: 'center',
-    marginBottom: 10,
   },
   retryButtonText: {
     color: 'white',
     fontSize: 16,
     fontWeight: '600',
   },
-  secondaryButton: {
-    borderWidth: 2,
-    borderColor: '#007AFF',
-    padding: 16,
-    borderRadius: 12,
-    minWidth: 150,
-    alignItems: 'center',
-  },
-  secondaryButtonText: {
-    color: '#007AFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
   emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
     padding: 40,
+    alignItems: 'center',
   },
   emptyTitle: {
     fontSize: 24,
@@ -432,9 +467,6 @@ const styles = StyleSheet.create({
   },
   actions: {
     padding: 20,
-    backgroundColor: '#fff',
-    borderTopWidth: 1,
-    borderTopColor: '#f0f0f0',
   },
   retakeButton: {
     flexDirection: 'row',

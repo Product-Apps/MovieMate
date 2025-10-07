@@ -1,17 +1,17 @@
-// app/favorites.tsx
+// app/favorites.tsx (Fixed - No nested ScrollView)
 import React, { useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
+  FlatList,
   Pressable,
   Alert
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useFavoriteStore } from '@/store/useFavoriteStore';
-import MovieList from '@/components/movie/MovieList';
+import MovieCard from '@/components/movie/MovieCard';
 
 export default function FavoritesScreen() {
   const router = useRouter();
@@ -44,6 +44,77 @@ export default function FavoritesScreen() {
     );
   };
 
+  const renderHeader = () => (
+    <>
+      {/* Stats & Filters */}
+      <View style={styles.statsSection}>
+        <View style={styles.statCard}>
+          <Text style={styles.statNumber}>{favorites.length}</Text>
+          <Text style={styles.statLabel}>Total Favorites</Text>
+        </View>
+        
+        <View style={styles.statCard}>
+          <Text style={styles.statNumber}>{genres.length}</Text>
+          <Text style={styles.statLabel}>Different Genres</Text>
+        </View>
+
+        <Pressable 
+          style={[styles.statCard, styles.clearButton]}
+          onPress={handleClearFavorites}
+        >
+          <Ionicons name="trash-outline" size={20} color="#FF3B30" />
+          <Text style={styles.clearButtonText}>Clear All</Text>
+        </Pressable>
+      </View>
+
+      {/* Genre Filter */}
+      {genres.length > 0 && (
+        <View style={styles.filterSection}>
+          <Text style={styles.filterTitle}>Filter by Genre:</Text>
+          <FlatList
+            horizontal
+            data={[{ id: 'all', name: 'All', count: favorites.length }, ...genres.map(g => ({ id: g, name: g, count: getFavoritesByGenre(g).length }))]}
+            renderItem={({ item }) => (
+              <Pressable
+                style={[
+                  styles.genreButton,
+                  (item.id === 'all' && selectedGenre === null) || selectedGenre === item.id ? styles.genreButtonActive : null
+                ]}
+                onPress={() => setSelectedGenre(item.id === 'all' ? null : item.id)}
+              >
+                <Text style={[
+                  styles.genreButtonText,
+                  (item.id === 'all' && selectedGenre === null) || selectedGenre === item.id ? styles.genreButtonTextActive : null
+                ]}>
+                  {item.name} ({item.count})
+                </Text>
+              </Pressable>
+            )}
+            keyExtractor={(item) => item.id}
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.genreScrollContainer}
+          />
+        </View>
+      )}
+    </>
+  );
+
+  const renderEmpty = () => (
+    <View style={styles.emptyContainer}>
+      <Ionicons name="heart-outline" size={64} color="#ccc" />
+      <Text style={styles.emptyTitle}>No Favorites Yet</Text>
+      <Text style={styles.emptyText}>
+        Add movies to your favorites by tapping the heart icon on any movie card.
+      </Text>
+      <Pressable 
+        style={styles.exploreButton}
+        onPress={() => router.push('/movies')}
+      >
+        <Text style={styles.exploreButtonText}>Explore Movies</Text>
+      </Pressable>
+    </View>
+  );
+
   return (
     <View style={styles.container}>
       {/* Header */}
@@ -58,105 +129,18 @@ export default function FavoritesScreen() {
         <View style={styles.placeholder} />
       </View>
 
-      {favorites.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <Ionicons name="heart-outline" size={64} color="#ccc" />
-          <Text style={styles.emptyTitle}>No Favorites Yet</Text>
-          <Text style={styles.emptyText}>
-            Add movies to your favorites by tapping the heart icon on any movie card.
-          </Text>
-          <Pressable 
-            style={styles.exploreButton}
-            onPress={() => router.push('/movies')}
-          >
-            <Text style={styles.exploreButtonText}>Explore Movies</Text>
-          </Pressable>
-        </View>
-      ) : (
-        <>
-          {/* Stats & Filters */}
-          <View style={styles.statsSection}>
-            <View style={styles.statCard}>
-              <Text style={styles.statNumber}>{favorites.length}</Text>
-              <Text style={styles.statLabel}>Total Favorites</Text>
-            </View>
-            
-            <View style={styles.statCard}>
-              <Text style={styles.statNumber}>{genres.length}</Text>
-              <Text style={styles.statLabel}>Different Genres</Text>
-            </View>
-
-            <Pressable 
-              style={[styles.statCard, styles.clearButton]}
-              onPress={handleClearFavorites}
-            >
-              <Ionicons name="trash-outline" size={20} color="#FF3B30" />
-              <Text style={styles.clearButtonText}>Clear All</Text>
-            </Pressable>
-          </View>
-
-          {/* Genre Filter */}
-          {genres.length > 0 && (
-            <View style={styles.filterSection}>
-              <Text style={styles.filterTitle}>Filter by Genre:</Text>
-              <ScrollView 
-                horizontal 
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.genreScrollContainer}
-              >
-                <Pressable
-                  style={[
-                    styles.genreButton,
-                    selectedGenre === null && styles.genreButtonActive
-                  ]}
-                  onPress={() => setSelectedGenre(null)}
-                >
-                  <Text style={[
-                    styles.genreButtonText,
-                    selectedGenre === null && styles.genreButtonTextActive
-                  ]}>
-                    All ({favorites.length})
-                  </Text>
-                </Pressable>
-                
-                {genres.map((genre) => {
-                  const count = getFavoritesByGenre(genre).length;
-                  return (
-                    <Pressable
-                      key={genre}
-                      style={[
-                        styles.genreButton,
-                        selectedGenre === genre && styles.genreButtonActive
-                      ]}
-                      onPress={() => setSelectedGenre(genre)}
-                    >
-                      <Text style={[
-                        styles.genreButtonText,
-                        selectedGenre === genre && styles.genreButtonTextActive
-                      ]}>
-                        {genre} ({count})
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </ScrollView>
-            </View>
-          )}
-
-          {/* Movies List */}
-          <ScrollView style={styles.moviesContainer}>
-            <MovieList 
-              movies={displayMovies}
-              showFavoriteButton={true}
-              emptyMessage={
-                selectedGenre 
-                  ? `No ${selectedGenre} movies in favorites`
-                  : "No favorite movies"
-              }
-            />
-          </ScrollView>
-        </>
-      )}
+      {/* Movies List */}
+      <FlatList
+        data={displayMovies}
+        renderItem={({ item }) => <MovieCard movie={item} showFavoriteButton={true} />}
+        keyExtractor={(item) => item.id.toString()}
+        numColumns={2}
+        columnWrapperStyle={styles.row}
+        ListHeaderComponent={favorites.length > 0 ? renderHeader : null}
+        ListEmptyComponent={renderEmpty}
+        contentContainerStyle={styles.listContainer}
+        showsVerticalScrollIndicator={false}
+      />
     </View>
   );
 }
@@ -188,11 +172,19 @@ const styles = StyleSheet.create({
   placeholder: {
     width: 40,
   },
+  listContainer: {
+    paddingBottom: 20,
+  },
+  row: {
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+  },
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 40,
+    marginTop: 100,
   },
   emptyTitle: {
     fontSize: 24,
@@ -280,8 +272,5 @@ const styles = StyleSheet.create({
   },
   genreButtonTextActive: {
     color: '#fff',
-  },
-  moviesContainer: {
-    flex: 1,
   },
 });
