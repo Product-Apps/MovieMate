@@ -1,145 +1,160 @@
-// app/favorites.tsx (Fixed - No nested ScrollView)
+// app/favorites.tsx
 import React, { useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
+  TouchableOpacity,
+  Alert,
   FlatList,
-  Pressable,
-  Alert
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { useFavoriteStore } from '@/store/useFavoriteStore';
 import MovieCard from '@/components/movie/MovieCard';
+import { Button } from '@/components/ui/Button';
+import { useRouter } from 'expo-router';
 
 export default function FavoritesScreen() {
   const router = useRouter();
   const { favorites, clearFavorites, getFavoritesByGenre } = useFavoriteStore();
-  const [selectedGenre, setSelectedGenre] = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState('recent'); // recent, title, year, rating
 
-  const genres = Array.from(
-    new Set(favorites.flatMap(movie => movie.genre))
-  ).sort();
+  const safeFavorites = Array.isArray(favorites) ? favorites : [];
 
-  const displayMovies = selectedGenre 
-    ? getFavoritesByGenre(selectedGenre)
-    : favorites;
-
-  const handleClearFavorites = () => {
+  const handleClearAll = () => {
     Alert.alert(
       'Clear All Favorites',
-      'Are you sure you want to remove all movies from your favorites?',
+      'Are you sure you want to remove all your favorite movies?',
       [
         { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Clear All',
+        { 
+          text: 'Clear All', 
           style: 'destructive',
-          onPress: () => {
-            clearFavorites();
-            Alert.alert('Success', 'All favorites have been cleared.');
-          },
+          onPress: clearFavorites 
         },
       ]
     );
   };
 
-  const renderHeader = () => (
-    <>
-      {/* Stats & Filters */}
-      <View style={styles.statsSection}>
-        <View style={styles.statCard}>
-          <Text style={styles.statNumber}>{favorites.length}</Text>
-          <Text style={styles.statLabel}>Total Favorites</Text>
-        </View>
-        
-        <View style={styles.statCard}>
-          <Text style={styles.statNumber}>{genres.length}</Text>
-          <Text style={styles.statLabel}>Different Genres</Text>
-        </View>
+  const handleSort = (sortType: string) => {
+    setSortBy(sortType);
+  };
 
-        <Pressable 
-          style={[styles.statCard, styles.clearButton]}
-          onPress={handleClearFavorites}
+  const getSortedFavorites = () => {
+    const sorted = [...safeFavorites];
+    
+    switch (sortBy) {
+      case 'title':
+        return sorted.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+      case 'year':
+        return sorted.sort((a, b) => (b.year || 0) - (a.year || 0));
+      case 'rating':
+        return sorted.sort((a, b) => (b.rating || 0) - (a.rating || 0));
+      case 'recent':
+      default:
+        return sorted.reverse(); // Most recently added first
+    }
+  };
+
+  const sortedFavorites = getSortedFavorites();
+
+  const renderHeader = () => (
+    <View>
+      <View style={styles.header}>
+        <TouchableOpacity 
+          style={styles.backButton}
+          onPress={() => router.back()}
         >
-          <Ionicons name="trash-outline" size={20} color="#FF3B30" />
-          <Text style={styles.clearButtonText}>Clear All</Text>
-        </Pressable>
+          <Ionicons name="arrow-back" size={24} color="#007AFF" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>My Favorites</Text>
+        <View style={styles.headerRight} />
       </View>
 
-      {/* Genre Filter */}
-      {genres.length > 0 && (
-        <View style={styles.filterSection}>
-          <Text style={styles.filterTitle}>Filter by Genre:</Text>
-          <FlatList
-            horizontal
-            data={[{ id: 'all', name: 'All', count: favorites.length }, ...genres.map(g => ({ id: g, name: g, count: getFavoritesByGenre(g).length }))]}
-            renderItem={({ item }) => (
-              <Pressable
-                style={[
-                  styles.genreButton,
-                  (item.id === 'all' && selectedGenre === null) || selectedGenre === item.id ? styles.genreButtonActive : null
-                ]}
-                onPress={() => setSelectedGenre(item.id === 'all' ? null : item.id)}
-              >
-                <Text style={[
-                  styles.genreButtonText,
-                  (item.id === 'all' && selectedGenre === null) || selectedGenre === item.id ? styles.genreButtonTextActive : null
-                ]}>
-                  {item.name} ({item.count})
-                </Text>
-              </Pressable>
-            )}
-            keyExtractor={(item) => item.id}
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.genreScrollContainer}
+      {safeFavorites.length > 0 && (
+        <View style={styles.controlsContainer}>
+          <Text style={styles.countText}>
+            {safeFavorites.length} movie{safeFavorites.length !== 1 ? 's' : ''}
+          </Text>
+          
+          <View style={styles.sortContainer}>
+            <Text style={styles.sortLabel}>Sort by:</Text>
+            <View style={styles.sortButtons}>
+              {[
+                { key: 'recent', label: 'Recent' },
+                { key: 'title', label: 'Title' },
+                { key: 'year', label: 'Year' },
+                { key: 'rating', label: 'Rating' },
+              ].map((option) => (
+                <TouchableOpacity
+                  key={option.key}
+                  style={[
+                    styles.sortButton,
+                    sortBy === option.key && styles.activeSortButton,
+                  ]}
+                  onPress={() => handleSort(option.key)}
+                >
+                  <Text style={[
+                    styles.sortButtonText,
+                    sortBy === option.key && styles.activeSortButtonText,
+                  ]}>
+                    {option.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
+          <Button
+            title="Clear All"
+            variant="outline"
+            onPress={handleClearAll}
+            style={styles.clearButton}
           />
         </View>
       )}
-    </>
+    </View>
   );
 
   const renderEmpty = () => (
     <View style={styles.emptyContainer}>
-      <Ionicons name="heart-outline" size={64} color="#ccc" />
+      <Ionicons name="heart-outline" size={80} color="#ccc" />
       <Text style={styles.emptyTitle}>No Favorites Yet</Text>
-      <Text style={styles.emptyText}>
-        Add movies to your favorites by tapping the heart icon on any movie card.
+      <Text style={styles.emptyDescription}>
+        Movies you mark as favorites will appear here
       </Text>
-      <Pressable 
-        style={styles.exploreButton}
+      <Button
+        title="Discover Movies"
         onPress={() => router.push('/movies')}
-      >
-        <Text style={styles.exploreButtonText}>Explore Movies</Text>
-      </Pressable>
+        style={styles.discoverButton}
+      />
+    </View>
+  );
+
+  const renderMovieItem = ({ item, index }: { item: any; index: number }) => (
+    <View style={[
+      styles.movieContainer,
+      index % 2 === 0 ? styles.movieContainerLeft : styles.movieContainerRight
+    ]}>
+      <MovieCard movie={item} showFavoriteButton={true} />
     </View>
   );
 
   return (
     <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Pressable 
-          style={styles.backButton} 
-          onPress={() => router.back()}
-        >
-          <Ionicons name="arrow-back" size={24} color="#007AFF" />
-        </Pressable>
-        <Text style={styles.title}>❤️ My Favorites</Text>
-        <View style={styles.placeholder} />
-      </View>
-
-      {/* Movies List */}
+      <StatusBar style="auto" />
+      
       <FlatList
-        data={displayMovies}
-        renderItem={({ item }) => <MovieCard movie={item} showFavoriteButton={true} />}
-        keyExtractor={(item) => item.id.toString()}
+        data={sortedFavorites}
+        keyExtractor={(item) => item.id?.toString() || Math.random().toString()}
+        renderItem={renderMovieItem}
         numColumns={2}
-        columnWrapperStyle={styles.row}
-        ListHeaderComponent={favorites.length > 0 ? renderHeader : null}
+        ListHeaderComponent={renderHeader}
         ListEmptyComponent={renderEmpty}
-        contentContainerStyle={styles.listContainer}
         showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.listContent}
+        columnWrapperStyle={sortedFavorites.length > 0 ? styles.row : undefined}
       />
     </View>
   );
@@ -148,129 +163,117 @@ export default function FavoritesScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#f9f9f9',
+  },
+  listContent: {
+    paddingBottom: 20,
+  },
+  row: {
+    justifyContent: 'space-between',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
     paddingTop: 60,
+    paddingHorizontal: 20,
     paddingBottom: 20,
     backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#e0e0e0',
   },
   backButton: {
     padding: 8,
   },
-  title: {
+  headerTitle: {
     fontSize: 20,
-    fontWeight: 'bold',
+    fontWeight: '600',
     color: '#333',
   },
-  placeholder: {
-    width: 40,
+  headerRight: {
+    width: 40, // Balance the back button
   },
-  listContainer: {
-    paddingBottom: 20,
-  },
-  row: {
-    justifyContent: 'space-between',
+  controlsContainer: {
+    backgroundColor: '#fff',
     paddingHorizontal: 20,
+    paddingBottom: 20,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#e0e0e0',
+  },
+  countText: {
+    fontSize: 16,
+    color: '#666',
+    marginBottom: 16,
+  },
+  sortContainer: {
+    marginBottom: 16,
+  },
+  sortLabel: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 8,
+  },
+  sortButtons: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  sortButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: '#f0f0f0',
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  activeSortButton: {
+    backgroundColor: '#007AFF',
+    borderColor: '#007AFF',
+  },
+  sortButtonText: {
+    fontSize: 12,
+    color: '#666',
+    fontWeight: '500',
+  },
+  activeSortButtonText: {
+    color: '#fff',
+  },
+  clearButton: {
+    alignSelf: 'flex-end',
   },
   emptyContainer: {
     flex: 1,
-    justifyContent: 'center',
     alignItems: 'center',
-    padding: 40,
-    marginTop: 100,
+    justifyContent: 'center',
+    paddingVertical: 100,
+    paddingHorizontal: 40,
   },
   emptyTitle: {
     fontSize: 24,
     fontWeight: 'bold',
     color: '#333',
     marginTop: 20,
-    marginBottom: 10,
+    marginBottom: 8,
   },
-  emptyText: {
+  emptyDescription: {
     fontSize: 16,
     color: '#666',
     textAlign: 'center',
     lineHeight: 22,
     marginBottom: 30,
   },
-  exploreButton: {
-    backgroundColor: '#007AFF',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
+  discoverButton: {
+    paddingHorizontal: 32,
   },
-  exploreButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  statsSection: {
-    flexDirection: 'row',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-  },
-  statCard: {
+  movieContainer: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginHorizontal: 4,
+    paddingHorizontal: 10,
   },
-  statNumber: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
+  movieContainerLeft: {
+    paddingLeft: 20,
+    paddingRight: 10,
   },
-  statLabel: {
-    fontSize: 12,
-    color: '#666',
-    marginTop: 4,
-  },
-  clearButton: {
-    backgroundColor: 'rgba(255, 59, 48, 0.1)',
-  },
-  clearButtonText: {
-    fontSize: 12,
-    color: '#FF3B30',
-    marginTop: 4,
-  },
-  filterSection: {
-    paddingHorizontal: 20,
-    paddingBottom: 16,
-  },
-  filterTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 12,
-  },
-  genreScrollContainer: {
+  movieContainerRight: {
+    paddingLeft: 10,
     paddingRight: 20,
-  },
-  genreButton: {
-    backgroundColor: '#f0f0f0',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    marginRight: 8,
-  },
-  genreButtonActive: {
-    backgroundColor: '#007AFF',
-  },
-  genreButtonText: {
-    fontSize: 14,
-    color: '#666',
-    fontWeight: '500',
-  },
-  genreButtonTextActive: {
-    color: '#fff',
   },
 });

@@ -1,3 +1,9 @@
+// constants/Colors.ts
+/**
+ * Below are the colors that are used in the app. The colors are defined in the light and dark mode.
+ * There are many other ways to style your app. For example, [Nativewind](https://www.nativewind.dev/), [Tamagui](https://tamagui.dev/), [unistyles](https://reactnativeunistyles.vercel.app), etc.
+ */
+
 const tintColorLight = '#0a7ea4';
 const tintColorDark = '#fff';
 
@@ -21,14 +27,19 @@ export const Colors = {
 };
 
 export const MoodColors = {
-  energetic: '#FF6B35',
-  calm: '#4A90E2', 
-  happy: '#7ED321',
-  nostalgic: '#8E44AD',
-  excited: '#E74C3C',
-  thoughtful: '#34495E',
-  romantic: '#E91E63',
-  anxious: '#95A5A6',
+  happy: '#FFF8E1',
+  sad: '#E3F2FD',
+  excited: '#FFE0B2',
+  calm: '#E8F5E8',
+  anxious: '#FFEBEE',
+  romantic: '#FCE4EC',
+  nostalgic: '#F3E5F5',
+  adventurous: '#E0F2F1',
+  mysterious: '#EEEEEE',
+  thoughtful: '#E1F5FE',
+  energetic: '#FFF3E0',
+  melancholic: '#F1F8E9',
+  optimistic: '#FFFDE7',
+  contemplative: '#E8EAF6',
+  default: '#f9f9f9',
 };
-
-export default Colors;

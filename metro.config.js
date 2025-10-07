@@ -1,12 +1,7 @@
 // metro.config.js
 const { getDefaultConfig } = require('expo/metro-config');
 
+/** @type {import('expo/metro-config').MetroConfig} */
 const config = getDefaultConfig(__dirname);
-
-// Ensure resolver cache is cleared
-config.resolver.platforms = ['ios', 'android', 'native', 'web'];
-
-// Reset cache on restart
-config.resetCache = true;
 
 module.exports = config;

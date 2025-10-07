@@ -1,62 +1,112 @@
-// components/movie/MovieList.tsx
+// components/movie/MovieList.tsx (Simplified - No nested FlatList)
 import React from 'react';
-import { FlatList, View, Text, StyleSheet } from 'react-native';
-import MovieCard from './MovieCard';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Dimensions,
+} from 'react-native';
 import { Movie } from '@/types/movie';
+import MovieCard from './MovieCard';
+import { LoadingSpinner } from '../ui/LoadingSpinner';
+
+const { width } = Dimensions.get('window');
 
 interface MovieListProps {
   movies: Movie[];
-  showFavoriteButton?: boolean;
+  loading?: boolean;
+  error?: string | null;
   numColumns?: number;
+  showFavoriteButton?: boolean;
   emptyMessage?: string;
+  contentContainerStyle?: any;
 }
 
-export default function MovieList({ 
-  movies, 
-  showFavoriteButton = true, 
+export default function MovieList({
+  movies = [],
+  loading = false,
+  error = null,
   numColumns = 2,
-  emptyMessage = "No movies found" 
+  showFavoriteButton = true,
+  emptyMessage = 'No movies found',
+  contentContainerStyle,
 }: MovieListProps) {
-  const renderMovie = ({ item }: { item: Movie }) => (
-    <MovieCard movie={item} showFavoriteButton={showFavoriteButton} />
-  );
+  const safeMovies = Array.isArray(movies) ? movies.filter(Boolean) : [];
 
-  const renderEmpty = () => (
-    <View style={styles.emptyContainer}>
-      <Text style={styles.emptyText}>{emptyMessage}</Text>
-    </View>
-  );
+  if (loading) {
+    return (
+      <View style={[styles.centerContainer, contentContainerStyle]}>
+        <LoadingSpinner />
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={[styles.centerContainer, contentContainerStyle]}>
+        <Text style={styles.errorText}>{error}</Text>
+      </View>
+    );
+  }
+
+  if (safeMovies.length === 0) {
+    return (
+      <View style={[styles.centerContainer, contentContainerStyle]}>
+        <Text style={styles.emptyText}>{emptyMessage}</Text>
+      </View>
+    );
+  }
 
   return (
-    <FlatList
-      data={movies}
-      renderItem={renderMovie}
-      keyExtractor={(item) => item.id.toString()}
-      numColumns={numColumns}
-      columnWrapperStyle={numColumns > 1 ? styles.row : undefined}
-      showsVerticalScrollIndicator={false}
-      contentContainerStyle={styles.container}
-      ListEmptyComponent={renderEmpty}
-    />
+    <View style={[styles.container, contentContainerStyle]}>
+      <View style={styles.grid}>
+        {safeMovies.map((movie, index) => (
+          <View 
+            key={movie.id} 
+            style={[
+              styles.movieItemContainer,
+              index % numColumns !== numColumns - 1 && styles.movieItemMargin
+            ]}
+          >
+            <MovieCard movie={movie} showFavoriteButton={showFavoriteButton} />
+          </View>
+        ))}
+      </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    padding: 20,
+    flex: 1,
   },
-  row: {
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'space-between',
+    paddingHorizontal: 20,
   },
-  emptyContainer: {
+  movieItemContainer: {
+    width: (width - 60) / 2,
+    marginBottom: 16,
+  },
+  movieItemMargin: {
+    marginRight: 20,
+  },
+  centerContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 60,
+    paddingVertical: 50,
   },
   emptyText: {
     fontSize: 16,
     color: '#666',
+    textAlign: 'center',
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#FF3B30',
     textAlign: 'center',
   },
 });

@@ -1,9 +1,18 @@
-import {useEffect} from "react";
-import {useFavoriteStore} from "../store/useFavoriteStore";
+// hooks/useLoadFavoritesOnMount.ts
+import { useEffect } from 'react';
+import { useFavoriteStore } from '@/store/useFavoriteStore';
 
-export default function useLoadFavoritesOnMount() {
-  const loadFavorites = useFavoriteStore((s) => s.loadFavorites);
+export function useLoadFavoritesOnMount() {
+  const { favorites } = useFavoriteStore();
+
   useEffect(() => {
-    loadFavorites();
-  }, []);
+    // This hook can be used to perform any initialization logic
+    // when favorites are loaded. Currently, the favorites are
+    // automatically persisted and loaded by Zustand.
+    console.log(`Loaded ${favorites.length} favorites`);
+  }, [favorites.length]);
+
+  return { favoritesCount: favorites.length };
 }
+
+export default useLoadFavoritesOnMount;

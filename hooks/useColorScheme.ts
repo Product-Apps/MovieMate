@@ -1,5 +1,6 @@
-import { useColorScheme as _useColorScheme } from 'react-native';
+// hooks/useColorScheme.ts
+import { useColorScheme as useRNColorScheme } from 'react-native';
 
 export function useColorScheme() {
-  return _useColorScheme() as NonNullable<ReturnType<typeof _useColorScheme>>;
+  return useRNColorScheme();
 }

@@ -1,90 +1,118 @@
+// store/useMoodStore.ts (Enhanced)
 import { create } from 'zustand';
-import { devtools } from 'zustand/middleware';
-import { PuzzleResponse, MoodAnalysis, MoodScore } from '@/types';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { MoodType } from '@/types/mood';
 
-interface MoodState {
-  puzzleResponses: PuzzleResponse[];
-  currentMoodAnalysis: MoodAnalysis | null;
-  isAnalyzing: boolean;
-  
-  // Actions
-  addPuzzleResponse: (response: PuzzleResponse) => void;
-  setMoodAnalysis: (analysis: MoodAnalysis) => void;
-  setAnalyzing: (analyzing: boolean) => void;
-  resetPuzzleData: () => void;
-  calculateMoodScores: () => MoodScore;
+export interface MoodAnalysis {
+  primaryMood: MoodType;
+  secondaryMoods: MoodType[];
+  confidence: number;
+  tags: string[];
+  energy: number;
+  valence: number;
+  arousal: number;
+  timestamp: number;
+  movieRecommendations?: any[];
 }
 
-export const useMoodStore = create<MoodState>()(
-  devtools(
+export interface PuzzleResponse {
+  questionId: string;
+  response: any;
+  timestamp: number;
+}
+
+interface MoodStore {
+  currentMoodAnalysis: MoodAnalysis | null;
+  moodHistory: MoodAnalysis[];
+  responses: PuzzleResponse[];
+  isAnalyzing: boolean;
+  completionPercentage: number;
+  setMoodAnalysis: (analysis: MoodAnalysis) => void;
+  addToMoodHistory: (analysis: MoodAnalysis) => void;
+  addResponse: (response: PuzzleResponse) => void;
+  setAnalyzing: (analyzing: boolean) => void;
+  updateCompletionPercentage: (percentage: number) => void;
+  resetPuzzleData: () => void;
+  clearMoodHistory: () => void;
+  getMoodTrends: () => any;
+}
+
+export const useMoodStore = create<MoodStore>()(
+  persist(
     (set, get) => ({
-      puzzleResponses: [],
       currentMoodAnalysis: null,
+      moodHistory: [],
+      responses: [],
       isAnalyzing: false,
+      completionPercentage: 0,
 
-      addPuzzleResponse: (response: PuzzleResponse) =>
-        set(
-          (state) => ({
-            puzzleResponses: [...state.puzzleResponses, response],
-          }),
-          false,
-          'mood/addPuzzleResponse'
-        ),
+      setMoodAnalysis: (analysis) => {
+        const enhancedAnalysis = {
+          ...analysis,
+          timestamp: Date.now(),
+        };
+        
+        set((state) => ({
+          currentMoodAnalysis: enhancedAnalysis,
+          moodHistory: [enhancedAnalysis, ...state.moodHistory.slice(0, 49)], // Keep last 50
+        }));
+      },
 
-      setMoodAnalysis: (analysis: MoodAnalysis) =>
-        set(
-          { currentMoodAnalysis: analysis },
-          false,
-          'mood/setMoodAnalysis'
-        ),
+      addToMoodHistory: (analysis) =>
+        set((state) => ({
+          moodHistory: [analysis, ...state.moodHistory.slice(0, 49)],
+        })),
 
-      setAnalyzing: (analyzing: boolean) =>
-        set(
-          { isAnalyzing: analyzing },
-          false,
-          'mood/setAnalyzing'
-        ),
+      addResponse: (response) =>
+        set((state) => ({
+          responses: [...state.responses, response],
+        })),
+
+      setAnalyzing: (analyzing) => set({ isAnalyzing: analyzing }),
+
+      updateCompletionPercentage: (percentage) =>
+        set({ completionPercentage: percentage }),
 
       resetPuzzleData: () =>
-        set(
-          {
-            puzzleResponses: [],
-            currentMoodAnalysis: null,
-            isAnalyzing: false,
-          },
-          false,
-          'mood/resetPuzzleData'
-        ),
+        set({
+          responses: [],
+          completionPercentage: 0,
+          currentMoodAnalysis: null,
+        }),
 
-      calculateMoodScores: (): MoodScore => {
-        const responses = get().puzzleResponses;
-        const scores: MoodScore = {
-          energetic: 0,
-          calm: 0,
-          happy: 0,
-          nostalgic: 0,
-          excited: 0,
-          thoughtful: 0,
-          romantic: 0,
-          anxious: 0,
-        };
+      clearMoodHistory: () => set({ moodHistory: [] }),
 
-        // This is a simplified calculation - in reality, you'd import from puzzle data
-        responses.forEach((response) => {
-          // Add logic to extract mood scores from responses
-          // This would reference the actual puzzle options and their mood_scores
+      getMoodTrends: () => {
+        const { moodHistory } = get();
+        const last30Days = moodHistory.filter(
+          (entry) => Date.now() - entry.timestamp < 30 * 24 * 60 * 60 * 1000
+        );
+
+        const moodCounts: { [key in MoodType]?: number } = {};
+        last30Days.forEach((entry) => {
+          moodCounts[entry.primaryMood] =
+            (moodCounts[entry.primaryMood] || 0) + 1;
         });
 
-        return scores;
+        return {
+          totalEntries: last30Days.length,
+          dominantMood: Object.keys(moodCounts).reduce((a, b) =>
+            (moodCounts[a as MoodType] ?? 0) >
+            (moodCounts[b as MoodType] ?? 0)
+              ? a
+              : b
+          ),
+          moodDistribution: moodCounts,
+          averageConfidence:
+            last30Days.reduce((sum, entry) => sum + entry.confidence, 0) /
+            last30Days.length,
+        };
       },
     }),
     {
-      name: 'mood-store',
+      name: 'mood-storage',
+      storage: createJSONStorage(() => AsyncStorage),
     }
   )
 );
-
-// Selectors
-export const usePuzzleResponses = () => useMoodStore((state) => state.puzzleResponses);
-export const useCurrentMoodAnalysis = () => useMoodStore((state) => state.currentMoodAnalysis);
-export const useIsAnalyzing = () => useMoodStore((state) => state.isAnalyzing);

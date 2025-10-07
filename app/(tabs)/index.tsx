@@ -1,331 +1,659 @@
-// app/(tabs)/index.tsx (Fixed - No nested ScrollView)
-import React, { useEffect } from 'react';
-import { StyleSheet, FlatList, Pressable, Alert, View, Text, RefreshControl } from 'react-native';
-import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
-import { useMoodStore } from '@/store/useMoodStore';
+// app/(tabs)/index.tsx (Enhanced Home Screen)
+import React, { useEffect, useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  RefreshControl,
+  FlatList,
+  TouchableOpacity,
+  Dimensions,
+  ImageBackground,
+} from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 import { useMovieStore } from '@/store/useMovieStore';
+import { useMoodStore } from '@/store/useMoodStore';
 import { useFavoriteStore } from '@/store/useFavoriteStore';
 import { useSettingsStore } from '@/store/useSettingsStore';
-import MovieCard from '@/components/movie/MovieCard';
 import { movieService } from '@/services/movieService';
+import { useMovieRecommendations } from '@/hooks/useMovieRecommendations';
+import MovieCard from '@/components/movie/MovieCard';
+import SwipeableMovieCard from '@/components/movie/SwipeableMovieCard';
+import { Card } from '@/components/ui/Card';
+import { Button } from '@/components/ui/Button';
+import { ProgressBar } from '@/components/ui/ProgressBar';
+import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
+import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { MoodColors } from '@/constants/Colors';
+import { Movie } from '@/types/movie';
+import { MoodAnalysis } from '@/types/mood';
+
+const { width } = Dimensions.get('window');
+
+const TRENDING_MOVIES_COUNT = 10;
+const MOOD_MATCHED_MOVIES_COUNT = 3;
+const FAVORITE_MOVIES_COUNT = 5;
+const RECOMMENDED_MOVIES_COUNT = 6;
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { currentMoodAnalysis, resetPuzzleData } = useMoodStore();
-  const { recommendations, setRecommendations } = useMovieStore();
+  const [trendingMovies, setTrendingMovies] = useState<Movie[]>([]);
+  const [moodMatchedMovies, setMoodMatchedMovies] = useState<Movie[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const { currentMoodAnalysis, completionPercentage, moodHistory } =
+    useMoodStore();
+  const { recommendations } = useMovieStore();
   const { favorites, getFavoriteCount } = useFavoriteStore();
   const { profile } = useSettingsStore();
-  const [refreshing, setRefreshing] = React.useState(false);
+  const { generateRecommendations, refreshRecommendations } = useMovieRecommendations();
 
   useEffect(() => {
-    loadRecommendations();
+    loadInitialData();
   }, []);
 
-  const loadRecommendations = async () => {
+  useEffect(() => {
+    if (currentMoodAnalysis) {
+      loadMoodMatchedMovies();
+    }
+  }, [currentMoodAnalysis, profile]);
+
+  const loadInitialData = async () => {
+    setLoading(true);
     try {
-      const popular = await movieService.getPopularMovies();
-      const filtered = movieService.filterMoviesByAge(popular);
-      const excludingFavorites = movieService.filterExcludingFavorites(
-        filtered, 
-        favorites.map(f => f.id)
-      );
+      const [popular, topRated] = await Promise.all([
+        movieService.getPopularMovies(),
+        movieService.getTopRatedMovies(),
+      ]);
       
-      setRecommendations(
-        excludingFavorites.slice(0, 10).map(movie => ({
-          movie,
-          matchScore: Math.floor(Math.random() * 30) + 70,
-          reason: 'Popular choice'
-        }))
-      );
+      // Combine and filter based on user preferences
+      const allMovies = [...(popular || []), ...(topRated || [])];
+      const filteredMovies = filterMoviesByPreferences(allMovies);
+      setTrendingMovies(filteredMovies.slice(0, TRENDING_MOVIES_COUNT));
+      setError(null);
     } catch (error) {
-      console.error('Failed to load recommendations:', error);
+      console.error('Error loading initial data:', error);
+      setError('Failed to load trending movies.');
+      setTrendingMovies([]);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await loadRecommendations();
-    setRefreshing(false);
+  const loadMoodMatchedMovies = async () => {
+    if (!currentMoodAnalysis) return;
+
+    try {
+      const moodRecommendations = await movieService.getMoviesByMood(
+        currentMoodAnalysis
+      );
+      const filteredRecommendations = filterMoviesByPreferences(
+        moodRecommendations.map((r) => r.movie)
+      );
+      setMoodMatchedMovies(
+        filteredRecommendations.slice(0, MOOD_MATCHED_MOVIES_COUNT)
+      );
+      setError(null);
+    } catch (error) {
+      console.error('Error loading mood matched movies:', error);
+      setError('Failed to load movies matching your mood.');
+      setMoodMatchedMovies([]);
+    }
   };
 
-  const handleStartPuzzles = () => {
-    resetPuzzleData();
+  const filterMoviesByPreferences = (movies: Movie[]) => {
+    if (!Array.isArray(movies)) return [];
+
+    return movies.filter((movie) => {
+      // Filter by preferred languages
+      if (profile.preferredLanguages?.length > 0) {
+        const movieLang = movie.language?.toLowerCase() || 'en';
+        if (!profile.preferredLanguages.includes(movieLang)) {
+          return false;
+        }
+      }
+      
+      // Filter by favorite genres
+      if (profile.favoriteGenres?.length > 0 && movie.genre?.length > 0) {
+        const hasMatchingGenre = movie.genre.some((genre: string) =>
+          profile.favoriteGenres.includes(genre)
+        );
+        if (!hasMatchingGenre) {
+          return false;
+        }
+      }
+      
+      return true;
+    });
+  };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await Promise.all([
+        loadInitialData(),
+        refreshRecommendations(),
+        loadMoodMatchedMovies(),
+      ]);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  const handleTakePuzzle = () => {
     router.push('/puzzles');
   };
 
-  const handleViewMovies = () => {
-    if (recommendations.length === 0) {
-      Alert.alert(
-        'No Recommendations',
-        'Complete the mood puzzles first to get personalized movie recommendations!',
-        [
-          { text: 'OK' },
-          { text: 'Start Puzzles', onPress: handleStartPuzzles }
-        ]
-      );
-      return;
-    }
+  const handleViewAllRecommendations = () => {
     router.push('/movies');
   };
 
   const handleViewFavorites = () => {
-    if (favorites.length === 0) {
-      Alert.alert('No Favorites', 'Add some movies to your favorites first!');
-      return;
-    }
     router.push('/favorites');
   };
 
-  const getGreeting = () => {
-    const hour = new Date().getHours();
-    if (hour < 12) return 'Good Morning';
-    if (hour < 18) return 'Good Afternoon';
-    return 'Good Evening';
+  const handleViewMoodHistory = () => {
+    router.push('/mood-history');
+  };
+
+  const safeRecommendations = Array.isArray(recommendations) ? recommendations : [];
+  const safeFavorites = Array.isArray(favorites) ? favorites : [];
+  const safeMoodHistory = Array.isArray(moodHistory) ? moodHistory : [];
+
+  // Get background color based on mood
+  const getMoodBackgroundColor = () => {
+    if (!currentMoodAnalysis) return MoodColors.default;
+    return MoodColors[currentMoodAnalysis.primaryMood] || MoodColors.default;
   };
 
   const renderHeader = () => (
-    <>
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.greeting}>
-          {getGreeting()}{profile.name ? `, ${profile.name}` : ''}! 👋
-        </Text>
-        <Text style={styles.title}>🎬 MoodFlix</Text>
-        <Text style={styles.subtitle}>
-          Discover movies through interactive puzzles that reveal your mood
-        </Text>
-      </View>
+    <View style={[styles.header, { backgroundColor: getMoodBackgroundColor() }]}>
+      <Text style={styles.welcomeText}>
+        Welcome back{profile.name ? `, ${profile.name}` : ''}!
+      </Text>
+      <Text style={styles.taglineText}>
+        {currentMoodAnalysis 
+          ? `Feeling ${currentMoodAnalysis.primaryMood}? Perfect movies await!`
+          : 'Discover movies that match your mood'
+        }
+      </Text>
+    </View>
+  );
 
-      {/* Current Mood */}
-      {currentMoodAnalysis && (
-        <View style={styles.moodSection}>
-          <Text style={styles.sectionTitle}>Current Mood</Text>
-          <View style={styles.moodCard}>
-            <Text style={styles.moodType}>{currentMoodAnalysis.primaryMood}</Text>
-            <Text style={styles.moodConfidence}>
-              {Math.round(currentMoodAnalysis.confidence * 100)}% confidence
+  const renderMoodSection = () => (
+    <Card style={styles.moodCard}>
+      <View style={styles.moodHeader}>
+        <Ionicons name="happy" size={24} color="#007AFF" />
+        <Text style={styles.cardTitle}>Mood Analysis</Text>
+      </View>
+      
+      {currentMoodAnalysis ? (
+        <View>
+          <View style={styles.moodResult}>
+            <Text style={styles.moodText}>
+              Current Mood: <Text style={styles.moodValue}>
+                {currentMoodAnalysis.primaryMood.charAt(0).toUpperCase() + 
+                 currentMoodAnalysis.primaryMood.slice(1)}
+              </Text>
+            </Text>
+            <Text style={styles.confidenceText}>
+              Confidence: {Math.round((currentMoodAnalysis.confidence || 0) * 100)}%
             </Text>
           </View>
-        </View>
-      )}
-
-      {/* Quick Stats */}
-      <View style={styles.statsSection}>
-        <View style={styles.statCard}>
-          <Ionicons name="heart" size={24} color="#FF3B30" />
-          <Text style={styles.statNumber}>{getFavoriteCount()}</Text>
-          <Text style={styles.statLabel}>Favorites</Text>
-        </View>
-        <View style={styles.statCard}>
-          <Ionicons name="film" size={24} color="#007AFF" />
-          <Text style={styles.statNumber}>{recommendations.length}</Text>
-          <Text style={styles.statLabel}>Recommendations</Text>
-        </View>
-        <View style={styles.statCard}>
-          <Ionicons name="person" size={24} color="#34C759" />
-          <Text style={styles.statNumber}>{profile.age}</Text>
-          <Text style={styles.statLabel}>Age</Text>
-        </View>
-      </View>
-
-      {/* Action Buttons */}
-      <View style={styles.actionSection}>
-        <Pressable style={styles.primaryButton} onPress={handleStartPuzzles}>
-          <Ionicons name="extension-puzzle" size={24} color="white" />
-          <Text style={styles.primaryButtonText}>Start Mood Puzzles</Text>
-        </Pressable>
-
-        <Pressable style={styles.secondaryButton} onPress={handleViewMovies}>
-          <Ionicons name="film-outline" size={24} color="#007AFF" />
-          <Text style={styles.secondaryButtonText}>View Recommendations</Text>
-        </Pressable>
-
-        <Pressable style={styles.secondaryButton} onPress={handleViewFavorites}>
-          <Ionicons name="heart-outline" size={24} color="#FF3B30" />
-          <Text style={styles.secondaryButtonText}>My Favorites</Text>
-        </Pressable>
-      </View>
-
-      {/* Your Favorites Section */}
-      {favorites.length > 0 && (
-        <View style={styles.moviesSection}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Your Favorites</Text>
-            <Pressable onPress={handleViewFavorites}>
-              <Text style={styles.seeAllText}>See All</Text>
-            </Pressable>
+          
+          {currentMoodAnalysis.secondaryMoods?.length > 0 && (
+            <View style={styles.secondaryMoods}>
+              <Text style={styles.secondaryLabel}>Also feeling:</Text>
+              <View style={styles.moodTags}>
+                {currentMoodAnalysis.secondaryMoods.slice(0, 3).map((mood, index) => (
+                  <View key={index} style={styles.moodTag}>
+                    <Text style={styles.moodTagText}>
+                      {mood.charAt(0).toUpperCase() + mood.slice(1)}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          )}
+          
+          <View style={styles.moodActions}>
+            <Button
+              title="Get New Recommendations"
+              onPress={generateRecommendations}
+              style={styles.primaryButton}
+              size="small"
+            />
+            <Button
+              title="Retake Puzzle"
+              onPress={handleTakePuzzle}
+              variant="outline"
+              style={styles.secondaryButton}
+              size="small"
+            />
           </View>
         </View>
-      )}
-    </>
-  );
-
-  const renderFooter = () => (
-    <>
-      {/* Recommended Section */}
-      {recommendations.length > 0 && (
-        <View style={styles.moviesSection}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Recommended for You</Text>
-            <Pressable onPress={handleViewMovies}>
-              <Text style={styles.seeAllText}>See All</Text>
-            </Pressable>
-          </View>
+      ) : (
+        <View>
+          <Text style={styles.description}>
+            Complete mood puzzles to get personalized movie recommendations
+          </Text>
+          {completionPercentage > 0 && (
+            <View style={styles.progressContainer}>
+              <Text style={styles.progressText}>
+                Progress: {completionPercentage}%
+              </Text>
+              <ProgressBar progress={completionPercentage} />
+            </View>
+          )}
+          <Button
+            title="Take Mood Puzzle"
+            onPress={handleTakePuzzle}
+            style={styles.button}
+          />
         </View>
       )}
-    </>
+    </Card>
   );
 
-  const allMovies = [
-    ...favorites.slice(0, 4),
-    ...recommendations.slice(0, 6).map(r => r.movie),
+  const renderStatsSection = () => (
+    <View style={styles.statsContainer}>
+      <TouchableOpacity style={styles.statCard} onPress={handleViewFavorites}>
+        <Ionicons name="heart" size={24} color="#FF3B30" />
+        <Text style={styles.statNumber}>{getFavoriteCount()}</Text>
+        <Text style={styles.statLabel}>Favorites</Text>
+      </TouchableOpacity>
+      
+      <TouchableOpacity style={styles.statCard} onPress={handleViewAllRecommendations}>
+        <Ionicons name="film" size={24} color="#007AFF" />
+        <Text style={styles.statNumber}>{safeRecommendations.length}</Text>
+        <Text style={styles.statLabel}>Recommendations</Text>
+      </TouchableOpacity>
+      
+      <TouchableOpacity style={styles.statCard} onPress={handleViewMoodHistory}>
+        <Ionicons name="analytics" size={24} color="#34C759" />
+        <Text style={styles.statNumber}>{safeMoodHistory.length}</Text>
+        <Text style={styles.statLabel}>Mood History</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
+  const renderFavoriteMovies = () => {
+    if (safeFavorites.length === 0) return null;
+
+    return (
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Your Favorites</Text>
+          <Button
+            title="View All"
+            variant="outline"
+            onPress={handleViewFavorites}
+            style={styles.viewAllButton}
+            size="small"
+          />
+        </View>
+        <FlatList
+          horizontal
+          data={safeFavorites.slice(0, FAVORITE_MOVIES_COUNT)}
+          keyExtractor={(item: Movie) => `fav-${item.id}`}
+          renderItem={({ item }: { item: Movie }) => (
+            <View style={styles.horizontalMovieCard}>
+              <MovieCard movie={item} showFavoriteButton={true} />
+            </View>
+          )}
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.horizontalList}
+        />
+      </View>
+    );
+  };
+
+  const renderMoodMatchedSection = () => {
+    if (!currentMoodAnalysis || moodMatchedMovies.length === 0) return null;
+    
+    return (
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>
+            Perfect for Your {currentMoodAnalysis.primaryMood.charAt(0).toUpperCase() + 
+            currentMoodAnalysis.primaryMood.slice(1)} Mood
+          </Text>
+          <TouchableOpacity onPress={handleViewMoodHistory}>
+            <Text style={styles.moodHistoryLink}>History</Text>
+          </TouchableOpacity>
+        </View>
+        <FlatList
+          horizontal
+          data={moodMatchedMovies}
+          keyExtractor={(item: Movie) => `mood-${item.id}`}
+          renderItem={({ item }: { item: Movie }) => (
+            <View style={styles.horizontalMovieCard}>
+              <SwipeableMovieCard movie={item} />
+            </View>
+          )}
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.horizontalList}
+        />
+        <Text style={styles.moodMatchNote}>
+          💡 Based on your latest mood analysis
+        </Text>
+      </View>
+    );
+  };
+
+  const renderRecommendationsSection = () => {
+    if (safeRecommendations.length === 0) return null;
+    
+    return (
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Recommended for You</Text>
+          <Button
+            title="View All"
+            variant="outline"
+            onPress={handleViewAllRecommendations}
+            style={styles.viewAllButton}
+            size="small"
+          />
+        </View>
+        <FlatList
+          horizontal
+          data={safeRecommendations.slice(0, RECOMMENDED_MOVIES_COUNT).map((r) => r.movie)}
+          keyExtractor={(item: Movie) => `rec-${item.id}`}
+          renderItem={({ item }: { item: Movie }) => (
+            <View style={styles.horizontalMovieCard}>
+              <SwipeableMovieCard movie={item} />
+            </View>
+          )}
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.horizontalList}
+        />
+      </View>
+    );
+  };
+
+  const renderTrendingSection = () => (
+    <View style={styles.section}>
+      <Text style={styles.sectionTitle}>Trending Now</Text>
+      <FlatList
+        horizontal
+        data={trendingMovies}
+        keyExtractor={(item: Movie) => `trending-${item.id}`}
+        renderItem={({ item }: { item: Movie }) => (
+          <View style={styles.horizontalMovieCard}>
+            <SwipeableMovieCard movie={item} />
+          </View>
+        )}
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.horizontalList}
+      />
+    </View>
+  );
+
+  const sections = [
+    { type: 'header', id: 'header' },
+    { type: 'mood', id: 'mood' },
+    { type: 'stats', id: 'stats' },
+    { type: 'favorites', id: 'favorites' },
+    { type: 'mood-matched', id: 'mood-matched' },
+    { type: 'recommendations', id: 'recommendations' },
+    { type: 'trending', id: 'trending' },
   ];
 
+  const renderSection = ({ item }: { item: { type: string } }) => {
+    switch (item.type) {
+      case 'header':
+        return renderHeader();
+      case 'mood':
+        return renderMoodSection();
+      case 'stats':
+        return renderStatsSection();
+      case 'favorites':
+        return renderFavoriteMovies();
+      case 'mood-matched':
+        return renderMoodMatchedSection();
+      case 'recommendations':
+        return renderRecommendationsSection();
+      case 'trending':
+        return renderTrendingSection();
+      default:
+        return null;
+    }
+  };
+
   return (
-    <FlatList
-      data={allMovies}
-      renderItem={({ item }) => <MovieCard movie={item} showFavoriteButton={true} />}
-      keyExtractor={(item) => item.id.toString()}
-      numColumns={2}
-      columnWrapperStyle={styles.row}
-      ListHeaderComponent={renderHeader}
-      ListFooterComponent={renderFooter}
-      contentContainerStyle={styles.container}
-      showsVerticalScrollIndicator={false}
-      refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-      }
-    />
+    <View style={[styles.container, { backgroundColor: getMoodBackgroundColor() }]}>
+      <StatusBar style="auto" />
+
+      {error && (
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>{error}</Text>
+          <Button title="Retry" onPress={loadInitialData} />
+        </View>
+      )}
+
+      <FlatList
+        data={sections}
+        keyExtractor={(item) => item.id}
+        renderItem={renderSection}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+        }
+        contentContainerStyle={styles.listContent}
+        style={styles.list}
+      />
+      
+      {loading && (
+        <View style={styles.loadingOverlay}>
+          <LoadingSpinner />
+        </View>
+      )}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#fff',
-    paddingBottom: 20,
+    flex: 1,
   },
-  row: {
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
+  list: {
+    flex: 1,
+  },
+  listContent: {
+    paddingBottom: 120,
   },
   header: {
     padding: 20,
     paddingTop: 60,
     alignItems: 'center',
   },
-  greeting: {
-    fontSize: 18,
-    color: '#666',
-    marginBottom: 8,
-  },
-  title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    marginBottom: 10,
-  },
-  subtitle: {
-    fontSize: 16,
-    textAlign: 'center',
-    opacity: 0.7,
-    lineHeight: 22,
-  },
-  moodSection: {
-    padding: 20,
-  },
-  moodCard: {
-    backgroundColor: 'rgba(0, 122, 255, 0.1)',
-    padding: 16,
-    borderRadius: 12,
-    borderLeftWidth: 4,
-    borderLeftColor: '#007AFF',
-  },
-  moodType: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#007AFF',
-    textTransform: 'capitalize',
-  },
-  moodConfidence: {
-    fontSize: 14,
-    color: '#666',
-    marginTop: 4,
-  },
-  statsSection: {
-    flexDirection: 'row',
-    paddingHorizontal: 20,
-    marginBottom: 20,
-  },
-  statCard: {
-    flex: 1,
-    backgroundColor: '#f8f9fa',
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginHorizontal: 5,
-  },
-  statNumber: {
+  welcomeText: {
     fontSize: 24,
     fontWeight: 'bold',
     color: '#333',
+    textAlign: 'center',
+  },
+  taglineText: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
     marginTop: 8,
+    lineHeight: 22,
+  },
+  moodCard: {
+    margin: 20,
+    marginTop: 10,
+  },
+  moodHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#333',
+    marginLeft: 8,
+  },
+  moodResult: {
+    marginBottom: 12,
+  },
+  moodText: {
+    fontSize: 16,
+    color: '#333',
+    marginBottom: 4,
+  },
+  moodValue: {
+    fontWeight: '600',
+    color: '#007AFF',
+  },
+  confidenceText: {
+    fontSize: 14,
+    color: '#666',
+  },
+  secondaryMoods: {
+    marginBottom: 16,
+  },
+  secondaryLabel: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 8,
+  },
+  moodTags: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  moodTag: {
+    backgroundColor: '#e3f2fd',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  moodTagText: {
+    fontSize: 12,
+    color: '#007AFF',
+    fontWeight: '500',
+  },
+  moodActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  primaryButton: {
+    flex: 1,
+  },
+  secondaryButton: {
+    flex: 1,
+  },
+  description: {
+    fontSize: 16,
+    color: '#666',
+    marginBottom: 16,
+    lineHeight: 22,
+  },
+  progressContainer: {
+    marginBottom: 16,
+  },
+  progressText: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 8,
+  },
+  button: {
+    marginTop: 8,
+  },
+  statsContainer: {
+    flexDirection: 'row',
+    marginHorizontal: 20,
+    marginBottom: 10,
+    gap: 10,
+  },
+  statCard: {
+    flex: 1,
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  statNumber: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#333',
+    marginTop: 6,
   },
   statLabel: {
     fontSize: 12,
     color: '#666',
-    marginTop: 4,
+    marginTop: 2,
+    textAlign: 'center',
   },
-  actionSection: {
-    padding: 20,
-  },
-  primaryButton: {
-    backgroundColor: '#007AFF',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 12,
-  },
-  primaryButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
-    marginLeft: 8,
-  },
-  secondaryButton: {
-    backgroundColor: '#f0f0f0',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 12,
-  },
-  secondaryButtonText: {
-    fontSize: 16,
-    fontWeight: '500',
-    marginLeft: 8,
-  },
-  moviesSection: {
-    paddingHorizontal: 20,
-    marginBottom: 16,
+  section: {
+    marginBottom: 20,
   },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    paddingHorizontal: 20,
+    marginBottom: 12,
   },
   sectionTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '600',
     color: '#333',
   },
-  seeAllText: {
+  viewAllButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  moodHistoryLink: {
     fontSize: 14,
     color: '#007AFF',
     fontWeight: '500',
+  },
+  horizontalList: {
+    paddingLeft: 20,
+  },
+  horizontalMovieCard: {
+    marginRight: 12,
+    width: 140,
+  },
+  moodMatchNote: {
+    fontSize: 12,
+    color: '#666',
+    fontStyle: 'italic',
+    textAlign: 'center',
+    marginTop: 8,
+  },
+  loadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  errorText: {
+    fontSize: 16,
+    color: 'red',
+    textAlign: 'center',
+    marginBottom: 16,
   },
 });

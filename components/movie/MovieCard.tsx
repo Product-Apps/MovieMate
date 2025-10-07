@@ -1,4 +1,4 @@
-// components/movie/MovieCard.tsx (Show language flag)
+// components/movie/MovieCard.tsx (Fixed)
 import React from 'react';
 import {
   View,
@@ -39,7 +39,15 @@ interface MovieCardProps {
 export default function MovieCard({ movie, showFavoriteButton = true }: MovieCardProps) {
   const router = useRouter();
   const { addFavorite, removeFavorite, isFavorite } = useFavoriteStore();
+
+  // Safety checks
+  if (!movie) {
+    return null;
+  }
+
   const isMovieFavorite = isFavorite(movie.id);
+  const movieGenres = Array.isArray(movie.genre) ? movie.genre : [];
+  const movieLanguage = typeof movie.language === 'string' ? movie.language.toLowerCase() : 'en';
 
   const handlePress = () => {
     router.push(`/movie/${movie.id}`);
@@ -86,24 +94,24 @@ export default function MovieCard({ movie, showFavoriteButton = true }: MovieCar
         {/* Language Flag */}
         <View style={styles.languageBadge}>
           <Text style={styles.languageFlag}>
-            {LANGUAGE_FLAGS[movie.language] || '🌐'}
+            {LANGUAGE_FLAGS[movieLanguage] || '🌐'}
           </Text>
         </View>
       </View>
 
       <View style={styles.movieInfo}>
         <Text style={styles.title} numberOfLines={2}>
-          {movie.title}
+          {movie.title || 'Unknown Title'}
         </Text>
         <View style={styles.yearLanguageContainer}>
-          <Text style={styles.year}>{movie.year}</Text>
+          <Text style={styles.year}>{movie.year || 'N/A'}</Text>
           <Text style={styles.language}>
-            {movie.language.toUpperCase()}
+            {movieLanguage.toUpperCase()}
           </Text>
         </View>
         
         <View style={styles.genreContainer}>
-          {movie.genre.slice(0, 2).map((genre, index) => (
+          {movieGenres.slice(0, 2).map((genre, index) => (
             <View key={index} style={styles.genreTag}>
               <Text style={styles.genreText}>{genre}</Text>
             </View>

@@ -1,113 +1,75 @@
-// store/useMovieStore.ts
+// store/useMovieStore.ts (Enhanced)
 import { create } from 'zustand';
-import { devtools } from 'zustand/middleware';
-import { Movie, MovieRecommendation } from '@/types';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Movie, MovieRecommendation } from '@/types/movie';
 
-interface MovieState {
-  movies: Movie[];
+interface MovieStore {
   recommendations: MovieRecommendation[];
-  selectedLanguages: string[];
-  selectedGenres: number[];
-  isLoading: boolean;
-  error: string | null;
+  searchResults: Movie[];
+  recentlyViewed: Movie[];
+  watchlist: Movie[];
   
-  setMovies: (movies: Movie[]) => void;
   setRecommendations: (recommendations: MovieRecommendation[]) => void;
-  setSelectedLanguages: (languages: string[]) => void;
-  setSelectedGenres: (genres: number[]) => void;
-  setLoading: (loading: boolean) => void;
-  setError: (error: string | null) => void;
-  addMovie: (movie: Movie) => void;
-  removeMovie: (movieId: number) => void;
+  setSearchResults: (results: Movie[]) => void;
+  addToRecentlyViewed: (movie: Movie) => void;
+  addToWatchlist: (movie: Movie) => void;
+  removeFromWatchlist: (movieId: number) => void;
   clearRecommendations: () => void;
+  clearSearchResults: () => void;
+  clearRecentlyViewed: () => void;
+  isInWatchlist: (movieId: number) => boolean;
 }
 
-export const useMovieStore = create<MovieState>()(
-  devtools(
-    (set) => ({
-      movies: [],
+export const useMovieStore = create<MovieStore>()(
+  persist(
+    (set, get) => ({
       recommendations: [],
-      selectedLanguages: ['en'],
-      selectedGenres: [],
-      isLoading: false,
-      error: null,
+      searchResults: [],
+      recentlyViewed: [],
+      watchlist: [],
 
-      setMovies: (movies: Movie[]) =>
-        set(
-          { movies },
-          false,
-          'movie/setMovies'
-        ),
+      setRecommendations: (recommendations) => set({ recommendations }),
+      
+      setSearchResults: (results) => set({ searchResults: results }),
 
-      setRecommendations: (recommendations: MovieRecommendation[]) =>
-        set(
-          { recommendations },
-          false,
-          'movie/setRecommendations'
-        ),
+      addToRecentlyViewed: (movie) =>
+        set((state) => {
+          const filtered = state.recentlyViewed.filter(m => m.id !== movie.id);
+          return {
+            recentlyViewed: [movie, ...filtered].slice(0, 20), // Keep last 20
+          };
+        }),
 
-      setSelectedLanguages: (languages: string[]) =>
-        set(
-          { selectedLanguages: languages },
-          false,
-          'movie/setSelectedLanguages'
-        ),
+      addToWatchlist: (movie) =>
+        set((state) => {
+          if (state.watchlist.some(m => m.id === movie.id)) {
+            return state; // Already in watchlist
+          }
+          return {
+            watchlist: [movie, ...state.watchlist],
+          };
+        }),
 
-      setSelectedGenres: (genres: number[]) =>
-        set(
-          { selectedGenres: genres },
-          false,
-          'movie/setSelectedGenres'
-        ),
+      removeFromWatchlist: (movieId) =>
+        set((state) => ({
+          watchlist: state.watchlist.filter(m => m.id !== movieId),
+        })),
 
-      setLoading: (loading: boolean) =>
-        set(
-          { isLoading: loading },
-          false,
-          'movie/setLoading'
-        ),
+      clearRecommendations: () => set({ recommendations: [] }),
+      
+      clearSearchResults: () => set({ searchResults: [] }),
+      
+      clearRecentlyViewed: () => set({ recentlyViewed: [] }),
 
-      setError: (error: string | null) =>
-        set(
-          { error },
-          false,
-          'movie/setError'
-        ),
-
-      addMovie: (movie: Movie) =>
-        set(
-          (state) => ({
-            movies: [...state.movies, movie],
-          }),
-          false,
-          'movie/addMovie'
-        ),
-
-      removeMovie: (movieId: number) =>
-        set(
-          (state) => ({
-            movies: state.movies.filter((movie) => movie.id !== movieId),
-          }),
-          false,
-          'movie/removeMovie'
-        ),
-
-      clearRecommendations: () =>
-        set(
-          { recommendations: [] },
-          false,
-          'movie/clearRecommendations'
-        ),
+      isInWatchlist: (movieId) => {
+        const { watchlist } = get();
+        return watchlist.some(m => m.id === movieId);
+      },
     }),
     {
-      name: 'movie-store',
+      name: 'movie-storage',
+      storage: createJSONStorage(() => AsyncStorage),
     }
   )
 );
-
-export const useMovies = () => useMovieStore((state) => state.movies);
-export const useRecommendations = () => useMovieStore((state) => state.recommendations);
-export const useSelectedLanguages = () => useMovieStore((state) => state.selectedLanguages);
-export const useSelectedGenres = () => useMovieStore((state) => state.selectedGenres);
-export const useMovieLoading = () => useMovieStore((state) => state.isLoading);
-export const useMovieError = () => useMovieStore((state) => state.error);

@@ -1,105 +1,120 @@
 // store/useSettingsStore.ts
 import { create } from 'zustand';
-import { devtools, persist, createJSONStorage } from 'zustand/middleware';
+import { persist } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { UserProfile, AppSettings } from '@/types';
 
-export type Gender = 'male' | 'female' | 'other' | 'prefer-not-to-say';
-
-export interface UserProfile {
-  name: string;
-  gender: Gender;
-  age: number;
-  dateOfBirth?: string;
-  country?: string;
-  favoriteGenres: string[];
-  favoriteLanguages: string[];
-}
-
-interface SettingsState {
+interface SettingsStore {
   profile: UserProfile;
-  darkMode: boolean;
-  notifications: boolean;
-  ageRestrictions: boolean;
-  adultContent: boolean;
+  settings: AppSettings;
   
-  updateProfile: (profile: Partial<UserProfile>) => void;
-  setDarkMode: (enabled: boolean) => void;
-  setNotifications: (enabled: boolean) => void;
-  setAgeRestrictions: (enabled: boolean) => void;
-  setAdultContent: (enabled: boolean) => void;
+  // Profile actions
+  updateProfile: (updates: Partial<UserProfile>) => void;
+  resetProfile: () => void;
+  
+  // Settings actions
+  updateSettings: (updates: Partial<AppSettings>) => void;
   resetSettings: () => void;
-  getAgeRestrictedContent: () => boolean;
+  
+  // Computed
+  isProfileComplete: () => boolean;
+  getAgeRating: () => string;
 }
 
 const defaultProfile: UserProfile = {
   name: '',
-  gender: 'prefer-not-to-say',
   age: 18,
   favoriteGenres: [],
-  favoriteLanguages: ['en'],
+  preferredLanguages: ['en'],
+  contentRating: 'PG-13',
+  avatar: '',
+  bio: '',
+  country: '',
 };
 
-export const useSettingsStore = create<SettingsState>()(
-  devtools(
-    persist(
-      (set, get) => ({
-        profile: defaultProfile,
-        darkMode: false,
-        notifications: true,
-        ageRestrictions: true,
-        adultContent: false,
+const defaultSettings: AppSettings = {
+  theme: 'auto',
+  language: 'en',
+  notifications: true,
+  autoPlay: false,
+  dataUsage: 'medium',
+  cacheSize: 100,
+  version: '1.0.0',
+};
 
-        updateProfile: (profileUpdate: Partial<UserProfile>) =>
-          set(
-            (state) => ({
-              profile: { ...state.profile, ...profileUpdate },
-            }),
-            false,
-            'settings/updateProfile'
-          ),
+export const useSettingsStore = create<SettingsStore>()(
+  persist(
+    (set, get) => ({
+      profile: defaultProfile,
+      settings: defaultSettings,
 
-        setDarkMode: (enabled: boolean) =>
-          set({ darkMode: enabled }, false, 'settings/setDarkMode'),
+      updateProfile: (updates) => {
+        set((state) => ({
+          profile: { 
+            ...state.profile, 
+            ...updates,
+            updatedAt: new Date()
+          }
+        }));
+      },
 
-        setNotifications: (enabled: boolean) =>
-          set({ notifications: enabled }, false, 'settings/setNotifications'),
+      resetProfile: () => {
+        set({ profile: { ...defaultProfile, createdAt: new Date() } });
+      },
 
-        setAgeRestrictions: (enabled: boolean) =>
-          set({ ageRestrictions: enabled }, false, 'settings/setAgeRestrictions'),
+      updateSettings: (updates) => {
+        set((state) => ({
+          settings: { ...state.settings, ...updates }
+        }));
+      },
 
-        setAdultContent: (enabled: boolean) =>
-          set({ adultContent: enabled }, false, 'settings/setAdultContent'),
+      resetSettings: () => {
+        set({ settings: defaultSettings });
+      },
 
-        resetSettings: () =>
-          set(
-            {
-              profile: defaultProfile,
-              darkMode: false,
-              notifications: true,
-              ageRestrictions: true,
-              adultContent: false,
-            },
-            false,
-            'settings/resetSettings'
-          ),
+      isProfileComplete: () => {
+        const { profile } = get();
+        return !!(
+          profile.name?.trim() &&
+          profile.age >= 13 &&
+          profile.favoriteGenres.length > 0
+        );
+      },
 
-        getAgeRestrictedContent: () => {
-          const { profile, ageRestrictions, adultContent } = get();
-          if (!ageRestrictions) return true;
-          if (adultContent) return true;
-          return profile.age >= 18;
-        },
-      }),
-      {
-        name: 'settings-storage',
-        storage: createJSONStorage(() => AsyncStorage),
-      }
-    ),
+      getAgeRating: () => {
+        const { profile } = get();
+        if (profile.age < 13) return 'G';
+        if (profile.age < 17) return 'PG-13';
+        return 'R';
+      },
+    }),
     {
       name: 'settings-store',
+      storage: {
+        getItem: async (name: string) => {
+          try {
+            const value = await AsyncStorage.getItem(name);
+            return value ? JSON.parse(value) : null;
+          } catch (error) {
+            console.error('Error loading settings store:', error);
+            return null;
+          }
+        },
+        setItem: async (name: string, value: any) => {
+          try {
+            await AsyncStorage.setItem(name, JSON.stringify(value));
+          } catch (error) {
+            console.error('Error saving settings store:', error);
+          }
+        },
+        removeItem: async (name: string) => {
+          try {
+            await AsyncStorage.removeItem(name);
+          } catch (error) {
+            console.error('Error removing settings store:', error);
+          }
+        },
+      },
     }
   )
 );
-
-export const useUserProfile = () => useSettingsStore((state) => state.profile);
-export const useDarkMode = () => useSettingsStore((state) => state.darkMode);

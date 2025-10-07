@@ -1,3 +1,4 @@
+// types/movie.ts
 export interface Movie {
   id: number;
   title: string;
@@ -18,14 +19,15 @@ export interface Movie {
   release_date?: string;
   vote_average?: number;
   vote_count?: number;
+  age_rating?: string;
 }
 
 export interface TMDBMovie {
   id: number;
   title: string;
   overview: string;
-  poster_path: string;
-  backdrop_path: string;
+  poster_path: string | null;
+  backdrop_path: string | null;
   release_date: string;
   genre_ids: number[];
   vote_average: number;
@@ -59,4 +61,55 @@ export interface Language {
 export interface Genre {
   id: number;
   name: string;
+}
+
+export interface MovieFilters {
+  genres: number[];
+  language: string;
+  minRating: number;
+  maxRating: number;
+  releaseYear?: number;
+}
+
+export interface TMDBMovieDetails {
+  id: number;
+  title: string;
+  overview: string;
+  poster_path: string | null;
+  backdrop_path: string | null;
+  release_date: string;
+  genres: { id: number; name: string }[];
+  vote_average: number;
+  vote_count: number;
+  runtime: number;
+  original_language: string;
+  production_companies: { id: number; name: string; logo_path: string | null }[];
+  budget: number;
+  revenue: number;
+}
+
+export interface TMDBCredits {
+  cast: {
+    id: number;
+    name: string;
+    character: string;
+    profile_path: string | null;
+  }[];
+  crew: {
+    id: number;
+    name: string;
+    job: string;
+    department: string;
+  }[];
+}
+
+export interface TMDBVideos {
+  results: {
+    id: string;
+    key: string;
+    name: string;
+    site: string;
+    type: string;
+    official: boolean;
+  }[];
 }

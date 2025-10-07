@@ -1,179 +1,189 @@
-// components/movie/LanguageSelector.tsx
+// components/movie/LanguageSelector.tsx (Fixed)
 import React from 'react';
-import { StyleSheet, View, Text, Pressable, ScrollView, Modal } from 'react-native';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  FlatList,
+  Modal,
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { Language } from '@/types/movie';
-import { LANGUAGES } from '@/constants/Languages';
+
+const LANGUAGES: Language[] = [
+  { code: 'all', name: 'All Languages', flag: '🌐' },
+  { code: 'en', name: 'English', flag: '🇺🇸' },
+  { code: 'hi', name: 'Hindi', flag: '🇮🇳' },
+  { code: 'ja', name: 'Japanese', flag: '🇯🇵' },
+  { code: 'ko', name: 'Korean', flag: '🇰🇷' },
+  { code: 'fr', name: 'French', flag: '🇫🇷' },
+  { code: 'es', name: 'Spanish', flag: '🇪🇸' },
+  { code: 'de', name: 'German', flag: '🇩🇪' },
+  { code: 'it', name: 'Italian', flag: '🇮🇹' },
+  { code: 'pt', name: 'Portuguese', flag: '🇵🇹' },
+  { code: 'ru', name: 'Russian', flag: '🇷🇺' },
+  { code: 'zh', name: 'Chinese', flag: '🇨🇳' },
+  { code: 'ar', name: 'Arabic', flag: '🇸🇦' },
+];
 
 interface LanguageSelectorProps {
   selectedLanguages: string[];
-  onLanguagesChange: (languages: string[]) => void;
-  visible: boolean;
-  onClose: () => void;
+  onLanguageToggle: (languageCode: string) => void;
+  multiSelect?: boolean;
+  showModal?: boolean;
+  onCloseModal?: () => void;
 }
 
 export default function LanguageSelector({
-  selectedLanguages,
-  onLanguagesChange,
-  visible,
-  onClose,
+  selectedLanguages = [],
+  onLanguageToggle,
+  multiSelect = true,
+  showModal = false,
+  onCloseModal,
 }: LanguageSelectorProps) {
-  const toggleLanguage = (languageCode: string) => {
-    if (selectedLanguages.includes(languageCode)) {
-      onLanguagesChange(selectedLanguages.filter((l) => l !== languageCode));
-    } else {
-      onLanguagesChange([...selectedLanguages, languageCode]);
+  // Ensure selectedLanguages is always an array
+  const safeSelectedLanguages = Array.isArray(selectedLanguages) ? selectedLanguages : [];
+
+  const handleLanguagePress = (languageCode: string) => {
+    if (typeof onLanguageToggle === 'function') {
+      onLanguageToggle(languageCode);
     }
   };
 
-  const selectAll = () => {
-    onLanguagesChange(LANGUAGES.map((l) => l.code));
+  const isLanguageSelected = (languageCode: string): boolean => {
+    if (!Array.isArray(safeSelectedLanguages)) return false;
+    return safeSelectedLanguages.includes(languageCode);
   };
 
-  const clearAll = () => {
-    onLanguagesChange([]);
-  };
-
-  return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      presentationStyle="pageSheet"
-      onRequestClose={onClose}
-    >
-      <View style={styles.container}>
-        <View style={styles.header}>
-          <Text style={styles.title}>Select Languages</Text>
-          <Pressable onPress={onClose} style={styles.closeButton}>
-            <Text style={styles.closeButtonText}>Done</Text>
-          </Pressable>
-        </View>
-
-        <View style={styles.actions}>
-          <Pressable onPress={selectAll} style={styles.actionButton}>
-            <Text style={styles.actionButtonText}>Select All</Text>
-          </Pressable>
-          <Pressable onPress={clearAll} style={styles.actionButton}>
-            <Text style={styles.actionButtonText}>Clear All</Text>
-          </Pressable>
-        </View>
-
-        <ScrollView style={styles.languagesList} showsVerticalScrollIndicator={false}>
-          {LANGUAGES.map((language) => {
-            const isSelected = selectedLanguages.includes(language.code);
-            return (
-              <Pressable
-                key={language.code}
-                style={[styles.languageItem, isSelected && styles.selectedLanguageItem]}
-                onPress={() => toggleLanguage(language.code)}
-              >
-                <View style={styles.languageInfo}>
-                  <Text style={styles.flag}>{language.flag}</Text>
-                  <Text style={[styles.languageName, isSelected && styles.selectedLanguageName]}>
-                    {language.name}
-                  </Text>
-                </View>
-                {isSelected && <Text style={styles.checkmark}>✓</Text>}
-              </Pressable>
-            );
-          })}
-        </ScrollView>
-
-        <View style={styles.footer}>
-          <Text style={styles.selectedCount}>
-            {selectedLanguages.length} language{selectedLanguages.length !== 1 ? 's' : ''} selected
+  const renderLanguageItem = ({ item }: { item: Language }) => {
+    if (!item || typeof item.code !== 'string') return null;
+    
+    const isSelected = isLanguageSelected(item.code);
+    
+    return (
+      <TouchableOpacity
+        style={[
+          styles.languageItem,
+          isSelected && styles.languageItemSelected,
+        ]}
+        onPress={() => handleLanguagePress(item.code)}
+      >
+        <View style={styles.languageContent}>
+          <Text style={styles.languageFlag}>{item.flag || '🌐'}</Text>
+          <Text style={[
+            styles.languageName,
+            isSelected && styles.languageNameSelected,
+          ]}>
+            {item.name || 'Unknown Language'}
           </Text>
         </View>
-      </View>
-    </Modal>
+        {isSelected && (
+          <Ionicons
+            name="checkmark-circle"
+            size={20}
+            color="#007AFF"
+          />
+        )}
+      </TouchableOpacity>
+    );
+  };
+
+  const content = (
+    <View style={styles.container}>
+      <FlatList
+        data={LANGUAGES}
+        keyExtractor={(item) => item?.code || Math.random().toString()}
+        renderItem={renderLanguageItem}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.listContent}
+      />
+    </View>
   );
+
+  if (showModal) {
+    return (
+      <Modal
+        visible={showModal}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={onCloseModal}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Select Languages</Text>
+            <TouchableOpacity
+              onPress={onCloseModal}
+              style={styles.closeButton}
+            >
+              <Ionicons name="close" size={24} color="#666" />
+            </TouchableOpacity>
+          </View>
+          {content}
+        </View>
+      </Modal>
+    );
+  }
+
+  return content;
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 20,
-    paddingTop: 60,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  closeButton: {
-    padding: 8,
-  },
-  closeButtonText: {
-    fontSize: 16,
-    color: '#007AFF',
-    fontWeight: '600',
-  },
-  actions: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    padding: 15,
-    backgroundColor: '#f8f9fa',
-  },
-  actionButton: {
+  listContent: {
     paddingVertical: 8,
-    paddingHorizontal: 20,
-  },
-  actionButtonText: {
-    fontSize: 14,
-    color: '#007AFF',
-    fontWeight: '500',
-  },
-  languagesList: {
-    flex: 1,
   },
   languageItem: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    justifyContent: 'space-between',
     padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    backgroundColor: '#fff',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#e0e0e0',
   },
-  selectedLanguageItem: {
-    backgroundColor: '#e3f2fd',
+  languageItemSelected: {
+    backgroundColor: '#f0f8ff',
   },
-  languageInfo: {
+  languageContent: {
     flexDirection: 'row',
     alignItems: 'center',
+    flex: 1,
   },
-  flag: {
+  languageFlag: {
     fontSize: 24,
     marginRight: 12,
   },
   languageName: {
     fontSize: 16,
     color: '#333',
+    fontWeight: '500',
   },
-  selectedLanguageName: {
+  languageNameSelected: {
     color: '#007AFF',
     fontWeight: '600',
   },
-  checkmark: {
-    fontSize: 20,
-    color: '#007AFF',
-    fontWeight: 'bold',
+  modalContainer: {
+    flex: 1,
+    backgroundColor: '#fff',
   },
-  footer: {
-    padding: 20,
-    borderTopWidth: 1,
-    borderTopColor: '#e0e0e0',
-    backgroundColor: '#f8f9fa',
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#e0e0e0',
+    backgroundColor: '#f9f9f9',
   },
-  selectedCount: {
-    fontSize: 14,
-    color: '#666',
-    textAlign: 'center',
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#333',
+  },
+  closeButton: {
+    padding: 8,
   },
 });

@@ -1,54 +1,45 @@
+// types/puzzle.ts
+export interface PuzzleQuestion {
+  id: string;
+  type: 'multiple-choice' | 'slider' | 'image-selection' | 'scenario' | 'rating';
+  question: string;
+  description?: string;
+  options?: PuzzleOption[];
+  minValue?: number;
+  maxValue?: number;
+  images?: string[];
+  scenario?: string;
+  moodWeights: Record<string, number>;
+}
+
 export interface PuzzleOption {
   id: string;
-  text?: string;
-  label?: string;
-  colors?: string[];
-  pattern?: string;
-  symbol?: string;
-  bpm?: number;
-  description?: string;
-  image?: string;
-  mood_scores: Record<string, number>;
-}
-
-export interface PuzzleQuestion {
-  id: number;
-  type: 'color_harmony' | 'pattern_completion' | 'story_context' | 'rhythm_matching' | 'image_association';
-  title: string;
-  description: string;
-  options: PuzzleOption[];
-  scenarios?: PuzzleScenario[];
-  pairs?: PuzzlePair[];
-}
-
-export interface PuzzleScenario {
-  id: string;
   text: string;
-  options: PuzzleOption[];
-}
-
-export interface PuzzlePair {
-  id: string;
-  option_a: {
-    image: string;
-    mood_scores: Record<string, number>;
-  };
-  option_b: {
-    image: string;
-    mood_scores: Record<string, number>;
-  };
+  value: number;
+  image?: string;
+  emoji?: string;
 }
 
 export interface PuzzleResponse {
-  puzzleId: number;
-  selectedOption: string;
-  responseTime: number;
-  timestamp: Date;
+  questionId: string;
+  response: string | number;
+  timestamp: number;
 }
 
-export interface PuzzleState {
-  currentPuzzleIndex: number;
+export interface PuzzleSession {
+  id: string;
+  startTime: number;
   responses: PuzzleResponse[];
   isCompleted: boolean;
-  startTime: Date | null;
+  moodAnalysis?: MoodAnalysis;
 }
+
+export interface PuzzleCategory {
+  id: string;
+  name: string;
+  description: string;
+  emoji: string;
+  questions: PuzzleQuestion[];
+}
+
+export type PuzzleType = 'color' | 'music' | 'scenario' | 'image' | 'weather' | 'activity';
